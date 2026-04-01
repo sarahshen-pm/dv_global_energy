@@ -111,7 +111,8 @@
                 <div class="chart-card" id="card-trend">
                     <div class="card-hdr">
                         <span>🌐</span><span class="card-title">Global Energy Mix</span>
-                        <span id="sunburst-year-label" style="margin-left:auto;font-family:var(--font-mono);font-size:0.75rem;color:var(--accent-2)"></span>
+                        <span id="sunburst-year-label"
+                            style="margin-left:auto;font-family:var(--font-mono);font-size:0.75rem;color:var(--accent-2)"></span>
                     </div>
                     <div id="sunburst-container" style="flex:1;min-height:0;position:relative;">
                         <svg id="sunburst-svg" style="width:100%;height:100%;"></svg>
@@ -155,7 +156,7 @@
             <!-- P1: Energy Mix -->
             <div class="chart-card p-mix">
                 <div class="card-hdr">
-                    <span>📊</span> <span class="card-title">Panel 1 — Energy Mix (Consumption)</span>
+                    <span>📊</span> <span class="card-title">Energy Consumption</span>
                 </div>
                 <div class="custom-legend" id="p1-filter">
                     <div class="leg-item active" data-val="coal" style="--c:#837060"><span class="leg-swatch"></span>
@@ -184,7 +185,7 @@
             <!-- P2: Electricity Generation -->
             <div class="chart-card p-elec">
                 <div class="card-hdr">
-                    <span>⚡</span> <span class="card-title">Panel 2 — Electricity Generation</span>
+                    <span>⚡</span> <span class="card-title">Electricity Generation</span>
                     <label class="chx-label"><input type="checkbox" id="p2-share-cb"> Show shares</label>
                 </div>
                 <div class="custom-legend" id="p2-filter">
@@ -212,9 +213,9 @@
             </div>
 
             <!-- P3: Fossil Production -->
-            <div class="chart-card p-fossil">
+            <div class="chart-card p-fossil" id="p3-fossil">
                 <div class="card-hdr">
-                    <span>🏭</span> <span class="card-title">Panel 3 — Fossil Production</span>
+                    <span>🏭</span> <span class="card-title">Fossil Production</span>
                     <div class="toggle-grp">
                         <button class="tog active" id="p3-mode-abs">TWh</button>
                         <button class="tog" id="p3-mode-yoy">Change %</button>
@@ -235,13 +236,14 @@
             <!-- P4: Per-Capita & Economic Efficiency -->
             <div class="chart-card p-econ">
                 <div class="card-hdr">
-                    <span>📈</span> <span class="card-title">Panel 4 — Efficiency</span>
+                    <span>📈</span> <span class="card-title">Efficiency</span>
                 </div>
                 <div class="custom-legend" id="p4-filter">
-                    <div class="leg-item active" data-val="electricity_generation_per_capita" style="--c:#38b6d8"><span
+                    <div class="leg-item active" data-val="per_capita_electricity" style="--c:#38b6d8"><span
                             class="leg-swatch"></span> Cap. Elec</div>
-                    <div class="leg-item active" data-val="primary_energy_consumption_per_capita" style="--c:#fc8d59">
-                        <span class="leg-swatch"></span> Cap. Energy</div>
+                    <div class="leg-item active" data-val="primary_energy_consumption_custom" style="--c:#fc8d59">
+                        <span class="leg-swatch"></span> Cap. Energy
+                    </div>
                     <div class="leg-item active" data-val="energy_per_gdp" style="--c:#d9ef8b"><span
                             class="leg-swatch"></span> Energy/GDP</div>
                 </div>
@@ -253,7 +255,7 @@
             <!-- P5: Emissions & Carbon Intensity -->
             <div class="chart-card p-co2">
                 <div class="card-hdr">
-                    <span>☁️</span> <span class="card-title">Panel 5 — Emissions</span>
+                    <span>☁️</span> <span class="card-title">Emissions</span>
                 </div>
                 <svg id="p5-svg" class="panel-svg"></svg>
                 <div id="p5-tt" class="tooltip"></div>
@@ -262,7 +264,7 @@
             <!-- P6: Net Electricity Imports -->
             <div class="chart-card p-import">
                 <div class="card-hdr">
-                    <span>🔌</span> <span class="card-title">Panel 6 — Net Imports</span>
+                    <span>🔌</span> <span class="card-title">Net Imports</span>
                 </div>
                 <svg id="p6-svg" class="panel-svg"></svg>
                 <div id="p6-tt" class="tooltip"></div>

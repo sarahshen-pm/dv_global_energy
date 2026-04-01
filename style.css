@@ -564,6 +564,7 @@ button {
 
 /* ── 9. CHART CARDS ─────────────────────────────────────────── */
 .chart-card {
+    position: relative;          /* anchor absolute-positioned tooltips to this card */
     background: var(--bg-card);
     border: 1px solid var(--border-soft);
     border-radius: var(--radius);

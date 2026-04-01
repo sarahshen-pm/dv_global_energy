@@ -915,11 +915,9 @@ function renderPanelMix(iso) {
     document.querySelectorAll('#p1-filter .leg-item.active').forEach(e => {
         keys.push(e.dataset.val + '_consumption');
     });
-    
-    if(!keys.length) return; // none selected
+    if (!keys.length) return;
     
     const stack = d3.stack().keys(keys).value((d, key) => isNaN(+d[key]) ? 0 : +d[key])(data);
-    
     const x = d3.scaleLinear().domain([YEAR_MIN, YEAR_MAX]).range([0, cw]);
     const maxVal = d3.max(stack, layer => d3.max(layer, d => d[1])) || 1;
     const y = d3.scaleLinear().domain([0, maxVal]).range([ch, 0]).nice();
@@ -933,24 +931,39 @@ function renderPanelMix(iso) {
         'hydro_consumption': '#38b6d8', 'solar_consumption': '#f9a826', 'wind_consumption': '#56de90',
         'biofuel_consumption': '#8fbe7a', 'other_renewable_consumption': '#56c490'
     };
-    
-    const area = d3.area()
-        .x(d => x(d.data.year))
-        .y0(d => y(d[0]))
-        .y1(d => y(d[1]));
-        
-    g.selectAll('.layer').data(stack).enter().append('path')
-        .attr('class', 'layer')
-        .attr('d', area)
-        .style('fill', d => colorMap[d.key] || '#999')
-        .style('opacity', 0.85)
-        .on('mousemove', function(event, d) {
-            d3.selectAll('.layer').style('opacity', 0.2);
-            d3.select(this).style('opacity', 1);
+    const KEY_LABEL_P1 = {
+        'coal_consumption':'Coal','oil_consumption':'Oil','gas_consumption':'Gas',
+        'nuclear_consumption':'Nuclear','hydro_consumption':'Hydro','solar_consumption':'Solar',
+        'wind_consumption':'Wind','biofuel_consumption':'Biofuel','other_renewable_consumption':'Other RE'
+    };
+
+    const area = d3.area().x(d => x(d.data.year)).y0(d => y(d[0])).y1(d => y(d[1]));
+
+    stack.forEach(layer => {
+        g.append('path').attr('class', 'layer').datum(layer).attr('d', area)
+            .style('fill', colorMap[layer.key] || '#999').style('opacity', 0.85);
+    });
+
+    const vLine = g.append('line').attr('y1', 0).attr('y2', ch)
+        .attr('stroke', 'rgba(255,255,255,0.4)').attr('stroke-width', 1)
+        .style('display', 'none').style('pointer-events', 'none');
+    const tip = document.getElementById('p1-tt');
+
+    g.append('rect').attr('width', cw).attr('height', ch)
+        .style('fill', 'none').style('pointer-events', 'all')
+        .on('mousemove', function(event) {
+            const [mx] = d3.pointer(event, this);
+            const yr = Math.round(x.invert(mx));
+            const row = data.find(d => d.year === yr);
+            if (!row) return;
+            vLine.style('display', null).attr('x1', x(yr)).attr('x2', x(yr));
+            const lines = keys.map(k => {
+                const v = isNaN(+row[k]) ? 0 : +row[k];
+                return `<div class="tt-row"><span class="tt-dot" style="background:${colorMap[k]||'#999'}"></span>${KEY_LABEL_P1[k]||k} <span class="tt-val">${d3.format(',.1f')(v)} TWh</span></div>`;
+            }).join('');
+            showTip(tip, `<div class="tt-title">${yr}</div>${lines}`, event);
         })
-        .on('mouseleave', function() {
-            d3.selectAll('.layer').style('opacity', 0.85);
-        });
+        .on('mouseleave', () => { hideTip(tip); vLine.style('display', 'none'); });
 }
 
 /* ── PANEL 2: ELECTRICITY GENERATION ──────────────────────── */
@@ -988,32 +1001,51 @@ function renderPanelElec(iso) {
         'hydro_electricity': '#38b6d8', 'solar_electricity': '#f9a826', 'wind_electricity': '#56de90',
         'biofuel_electricity': '#8fbe7a', 'other_renewable_electricity': '#56c490'
     };
-    
-    g.selectAll('.serie').data(stack).enter().append('g')
-        .attr('fill', d => colorMap[d.key] || '#999')
-        .selectAll('rect').data(d => d).enter().append('rect')
-        .attr('x', d => x(d.data.year))
-        .attr('y', d => y(d[1]))
-        .attr('height', d => y(d[0]) - y(d[1]))
-        .attr('width', x.bandwidth());
-        
-    if(showShare) {
-        // Implement share overlay lines
+    // Explicit share column map — other_renewable_electricity → other_renewables_share_elec (note the 's')
+    const SHARE_ELEC_MAP = {
+        'coal_electricity': 'coal_share_elec', 'oil_electricity': 'oil_share_elec',
+        'gas_electricity': 'gas_share_elec', 'nuclear_electricity': 'nuclear_share_elec',
+        'hydro_electricity': 'hydro_share_elec', 'solar_electricity': 'solar_share_elec',
+        'wind_electricity': 'wind_share_elec', 'biofuel_electricity': 'biofuel_share_elec',
+        'other_renewable_electricity': 'other_renewables_share_elec'
+    };
+    const KEY_LABEL_P2 = {
+        'coal_electricity':'Coal','oil_electricity':'Oil','gas_electricity':'Gas',
+        'nuclear_electricity':'Nuclear','hydro_electricity':'Hydro','solar_electricity':'Solar',
+        'wind_electricity':'Wind','biofuel_electricity':'Biofuel','other_renewable_electricity':'Other RE'
+    };
+    const tip = document.getElementById('p2-tt');
+
+    stack.forEach(layer => {
+        g.append('g').attr('fill', colorMap[layer.key] || '#999')
+            .selectAll('rect').data(layer).enter().append('rect')
+            .attr('x', d => x(d.data.year))
+            .attr('y', d => y(d[1]))
+            .attr('height', d => Math.max(0, y(d[0]) - y(d[1])))
+            .attr('width', x.bandwidth())
+            .on('mousemove', function(event, d) {
+                const v = d[1] - d[0];
+                const shareKey = SHARE_ELEC_MAP[layer.key];
+                const shareVal = showShare && shareKey ? +d.data[shareKey] : NaN;
+                const shareLine = !isNaN(shareVal) ? `<div class="tt-row" style="color:var(--text-md);font-size:0.7rem">Share: ${d3.format('.1f')(shareVal)}%</div>` : '';
+                showTip(tip, `<div class="tt-title">${d.data.year}</div><div class="tt-row"><span class="tt-dot" style="background:${colorMap[layer.key]||'#999'}"></span>${KEY_LABEL_P2[layer.key]||layer.key} <span class="tt-val">${d3.format(',.1f')(v)} TWh</span></div>${shareLine}`, event);
+            })
+            .on('mouseleave', () => hideTip(tip));
+    });
+
+    if (showShare) {
         const yRight = d3.scaleLinear().domain([0, 100]).range([ch, 0]);
-        g.append('g').attr('transform', `translate(${cw},0)`).call(d3.axisRight(yRight).ticks(5).tickFormat(d=>d+'%'));
-        
+        g.append('g').attr('transform', `translate(${cw},0)`).call(d3.axisRight(yRight).ticks(5).tickFormat(d => d + '%'));
         keys.forEach(k => {
-            const shareKey = k.replace('_electricity', '_share_elec');
+            const shareKey = SHARE_ELEC_MAP[k];
+            if (!shareKey) return;
             const line = d3.line()
-                .defined(d => !isNaN(d[shareKey]))
-                .x(d => x(d.year) + x.bandwidth()/2)
-                .y(d => yRight(d[shareKey]));
-            g.append('path')
-                .datum(data)
-                .attr('fill', 'none')
-                .attr('stroke', colorMap[k]||'#fff')
-                .attr('stroke-width', 2)
-                .attr('d', line);
+                .defined(d => !isNaN(+d[shareKey]))
+                .x(d => x(d.year) + x.bandwidth() / 2)
+                .y(d => yRight(+d[shareKey]));
+            g.append('path').datum(data)
+                .attr('fill', 'none').attr('stroke', colorMap[k] || '#fff')
+                .attr('stroke-width', 2).style('pointer-events', 'none').attr('d', line);
         });
     }
 }
@@ -1039,37 +1071,55 @@ function renderPanelFossil(iso) {
     g.append('g').attr('transform', `translate(0,${ch})`).call(d3.axisBottom(x).tickFormat(d3.format('d')).ticks(5));
     
     const colorMap = { 'coal_production': '#837060', 'oil_production': '#d4721a', 'gas_production': '#e2b840' };
-    
+    const KEY_LABEL_P3 = { 'coal_production':'Coal','oil_production':'Oil','gas_production':'Gas' };
+    const tip = document.getElementById('p3-tt');
+
     if (P_STATE.p3Mode === 'abs') {
         const maxVal = d3.max(data, d => d3.max(keys, k => +d[k]||0)) || 1;
         const y = d3.scaleLinear().domain([0, maxVal]).range([ch, 0]).nice();
         g.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.2s')));
-        
         keys.forEach(k => {
-            const line = d3.line().defined(d => !isNaN(+d[k])).x(d => x(d.year)).y(d => y(+d[k]));
-            g.append('path').datum(data).attr('fill', 'none').attr('stroke', colorMap[k]).attr('stroke-width', 2).attr('d', line);
+            const lineGen = d3.line().defined(d => !isNaN(+d[k])).x(d => x(d.year)).y(d => y(+d[k]));
+            g.append('path').datum(data).attr('fill', 'none').attr('stroke', colorMap[k]).attr('stroke-width', 2).style('pointer-events','none').attr('d', lineGen);
         });
+        const vLine = g.append('line').attr('y1',0).attr('y2',ch)
+            .attr('stroke','rgba(255,255,255,0.4)').attr('stroke-width',1).style('display','none').style('pointer-events','none');
+        g.append('rect').attr('width',cw).attr('height',ch).style('fill','none').style('pointer-events','all')
+            .on('mousemove', function(event) {
+                const [mx] = d3.pointer(event, this);
+                const yr = Math.round(x.invert(mx));
+                const row = data.find(d => d.year === yr);
+                if (!row) return;
+                vLine.style('display',null).attr('x1',x(yr)).attr('x2',x(yr));
+                const lines = keys.map(k => {
+                    const v = isNaN(+row[k]) ? 0 : +row[k];
+                    return `<div class="tt-row"><span class="tt-dot" style="background:${colorMap[k]}"></span>${KEY_LABEL_P3[k]} <span class="tt-val">${d3.format(',.1f')(v)} TWh</span></div>`;
+                }).join('');
+                showTip(tip, `<div class="tt-title">${yr}</div>${lines}`, event);
+            })
+            .on('mouseleave', () => { hideTip(tip); vLine.style('display','none'); });
     } else {
-        // YoY Change %
-        // Need to calculate YoY for total fossil production selected
         const yoyData = [];
-        for(let i=1; i<data.length; i++) {
+        for (let i = 1; i < data.length; i++) {
             let prev = d3.sum(keys, k => +data[i-1][k]||0);
             let curr = d3.sum(keys, k => +data[i][k]||0);
             let pct = prev > 0 ? ((curr - prev)/prev)*100 : 0;
             yoyData.push({year: data[i].year, val: pct});
         }
         const y = d3.scaleLinear().domain([-20, 20]).range([ch, 0]).clamp(true);
-        g.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(d=>d+'%'));
-        g.append('line').attr('x1', 0).attr('x2', cw).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', '#666');
-        
-        const xb = d3.scaleBand().domain(yoyData.map(d=>d.year)).range([0, cw]).padding(0.2);
+        g.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(d => d+'%'));
+        g.append('line').attr('x1',0).attr('x2',cw).attr('y1',y(0)).attr('y2',y(0)).attr('stroke','#666');
+        const xb = d3.scaleBand().domain(yoyData.map(d=>d.year)).range([0,cw]).padding(0.2);
         g.selectAll('rect').data(yoyData).enter().append('rect')
-            .attr('x', d => xb(d.year))
-            .attr('width', xb.bandwidth())
+            .attr('x', d => xb(d.year)).attr('width', xb.bandwidth())
             .attr('y', d => d.val >= 0 ? y(d.val) : y(0))
             .attr('height', d => Math.abs(y(d.val) - y(0)))
-            .attr('fill', d => d.val >= 0 ? '#d9ef8b' : '#fc8d59');
+            .attr('fill', d => d.val >= 0 ? '#d9ef8b' : '#fc8d59')
+            .on('mousemove', function(event, d) {
+                const c = d.val >= 0 ? '#d9ef8b' : '#fc8d59';
+                showTip(tip, `<div class="tt-title">${d.year}</div><div class="tt-row">YoY Change <span class="tt-val" style="color:${c}">${d3.format('+.2f')(d.val)}%</span></div>`, event);
+            })
+            .on('mouseleave', () => hideTip(tip));
     }
 }
 
@@ -1094,37 +1144,65 @@ function renderPanelEcon(iso) {
     g.append('g').attr('transform', `translate(0,${ch})`).call(d3.axisBottom(x).tickFormat(d3.format('d')).ticks(5));
     
     const colorMap = {
-        'electricity_generation_per_capita': '#38b6d8',
-        'primary_energy_consumption_per_capita': '#fc8d59',
+        'per_capita_electricity': '#38b6d8',
+        'primary_energy_consumption_custom': '#fc8d59',
         'energy_per_gdp': '#d9ef8b'
     };
-    
-    // Dual y-axis: energy_per_gdp usually kWh/$, others are TWh/person? 
-    // Actually per_capita is kWh. energy_per_gdp is kWh/$.
-    const capKeys = keys.filter(k => k.includes('capita'));
-    const gdpKeys = keys.filter(k => k.includes('gdp'));
-    
+    const KEY_LABEL_P4 = {
+        'per_capita_electricity': 'Cap. Elec (kWh/person)',
+        'primary_energy_consumption_custom': 'Cap. Energy (kWh/billion person)',
+        'energy_per_gdp': 'Energy/GDP (kWh/$)'
+    };
+
+    // Calculate custom column as requested
+    data.forEach(d => {
+        if (!isNaN(+d.primary_energy_consumption) && !isNaN(+d.population) && +d.population > 0) {
+            d.primary_energy_consumption_custom = (+d.primary_energy_consumption) / (+d.population * 1e9);
+        } else {
+            d.primary_energy_consumption_custom = NaN;
+        }
+    });
+
+    const capKeys = keys.filter(k => k === 'per_capita_electricity' || k === 'primary_energy_consumption_custom');
+    const gdpKeys = keys.filter(k => k === 'energy_per_gdp');
+    let yLscale, yRscale;
+
     if (capKeys.length) {
         const maxVal = d3.max(data, d => d3.max(capKeys, k => +d[k]||0)) || 1;
-        const yL = d3.scaleLinear().domain([0, maxVal]).range([ch, 0]).nice();
-        g.append('g').call(d3.axisLeft(yL).ticks(5).tickFormat(d3.format('.2s')));
-        
+        yLscale = d3.scaleLinear().domain([0, maxVal]).range([ch, 0]).nice();
+        g.append('g').call(d3.axisLeft(yLscale).ticks(5).tickFormat(d3.format('.2s')));
         capKeys.forEach(k => {
-            const line = d3.line().defined(d => !isNaN(+d[k])).x(d => x(d.year)).y(d => yL(+d[k]));
-            g.append('path').datum(data).attr('fill', 'none').attr('stroke', colorMap[k]).attr('stroke-width', 2).attr('d', line);
+            const line = d3.line().defined(d => !isNaN(+d[k])).x(d => x(d.year)).y(d => yLscale(+d[k]));
+            g.append('path').datum(data).attr('fill','none').attr('stroke',colorMap[k]).attr('stroke-width',2).style('pointer-events','none').attr('d',line);
         });
     }
-    
     if (gdpKeys.length) {
         const maxVal = d3.max(data, d => d3.max(gdpKeys, k => +d[k]||0)) || 1;
-        const yR = d3.scaleLinear().domain([0, maxVal]).range([ch, 0]).nice();
-        g.append('g').attr('transform', `translate(${cw},0)`).call(d3.axisRight(yR).ticks(5).tickFormat(d3.format('.2s')));
-        
+        yRscale = d3.scaleLinear().domain([0, maxVal]).range([ch, 0]).nice();
+        g.append('g').attr('transform',`translate(${cw},0)`).call(d3.axisRight(yRscale).ticks(5).tickFormat(d3.format('.2s')));
         gdpKeys.forEach(k => {
-            const line = d3.line().defined(d => !isNaN(+d[k])).x(d => x(d.year)).y(d => yR(+d[k]));
-            g.append('path').datum(data).attr('fill', 'none').attr('stroke', colorMap[k]).attr('stroke-width', 2).attr('stroke-dasharray', '4 2').attr('d', line);
+            const line = d3.line().defined(d => !isNaN(+d[k])).x(d => x(d.year)).y(d => yRscale(+d[k]));
+            g.append('path').datum(data).attr('fill','none').attr('stroke',colorMap[k]).attr('stroke-width',2).attr('stroke-dasharray','4 2').style('pointer-events','none').attr('d',line);
         });
     }
+
+    const tip = document.getElementById('p4-tt');
+    const vLine = g.append('line').attr('y1',0).attr('y2',ch)
+        .attr('stroke','rgba(255,255,255,0.4)').attr('stroke-width',1).style('display','none').style('pointer-events','none');
+    g.append('rect').attr('width',cw).attr('height',ch).style('fill','none').style('pointer-events','all')
+        .on('mousemove', function(event) {
+            const [mx] = d3.pointer(event, this);
+            const yr = Math.round(x.invert(mx));
+            const row = data.find(d => d.year === yr);
+            if (!row) return;
+            vLine.style('display',null).attr('x1',x(yr)).attr('x2',x(yr));
+            const lines = keys.map(k => {
+                const v = +row[k];
+                return `<div class="tt-row"><span class="tt-dot" style="background:${colorMap[k]||'#999'}"></span>${KEY_LABEL_P4[k]||k} <span class="tt-val">${isNaN(v)?'N/A':d3.format(',.1f')(v)}</span></div>`;
+            }).join('');
+            showTip(tip, `<div class="tt-title">${yr}</div>${lines}`, event);
+        })
+        .on('mouseleave', () => { hideTip(tip); vLine.style('display','none'); });
 }
 
 /* ── PANEL 5: EMISSIONS ───────────────────────────────────── */
@@ -1149,12 +1227,29 @@ function renderPanelCO2(iso) {
     
     g.append('g').call(d3.axisLeft(yL).ticks(5));
     g.append('g').attr('transform', `translate(${cw},0)`).call(d3.axisRight(yR).ticks(5));
-    
+
     const l1 = d3.line().defined(d => !isNaN(+d.greenhouse_gas_emissions)).x(d => x(d.year)).y(d => yL(+d.greenhouse_gas_emissions));
-    g.append('path').datum(data).attr('fill', 'none').attr('stroke', '#fc8d59').attr('stroke-width', 2).attr('d', l1);
-    
+    g.append('path').datum(data).attr('fill','none').attr('stroke','#fc8d59').attr('stroke-width',2).style('pointer-events','none').attr('d',l1);
     const l2 = d3.line().defined(d => !isNaN(+d.carbon_intensity_elec)).x(d => x(d.year)).y(d => yR(+d.carbon_intensity_elec));
-    g.append('path').datum(data).attr('fill', 'none').attr('stroke', '#a6d96a').attr('stroke-width', 2).attr('d', l2);
+    g.append('path').datum(data).attr('fill','none').attr('stroke','#a6d96a').attr('stroke-width',2).style('pointer-events','none').attr('d',l2);
+
+    const tip = document.getElementById('p5-tt');
+    const vLine = g.append('line').attr('y1',0).attr('y2',ch)
+        .attr('stroke','rgba(255,255,255,0.4)').attr('stroke-width',1).style('display','none').style('pointer-events','none');
+    g.append('rect').attr('width',cw).attr('height',ch).style('fill','none').style('pointer-events','all')
+        .on('mousemove', function(event) {
+            const [mx] = d3.pointer(event, this);
+            const yr = Math.round(x.invert(mx));
+            const row = data.find(d => d.year === yr);
+            if (!row) return;
+            vLine.style('display',null).attr('x1',x(yr)).attr('x2',x(yr));
+            const ghg = +row.greenhouse_gas_emissions;
+            const ci = +row.carbon_intensity_elec;
+            showTip(tip, `<div class="tt-title">${yr}</div>
+                <div class="tt-row"><span class="tt-dot" style="background:#fc8d59"></span>GHG Emissions <span class="tt-val">${isNaN(ghg)?'N/A':d3.format(',.1f')(ghg)} MtCO₂e</span></div>
+                <div class="tt-row"><span class="tt-dot" style="background:#a6d96a"></span>Carbon Intensity <span class="tt-val">${isNaN(ci)?'N/A':d3.format(',.1f')(ci)} gCO₂/kWh</span></div>`, event);
+        })
+        .on('mouseleave', () => { hideTip(tip); vLine.style('display','none'); });
 }
 
 /* ── PANEL 6: NET IMPORTS ─────────────────────────────────── */
@@ -1179,23 +1274,32 @@ function renderPanelImport(iso) {
     g.append('g').attr('transform', `translate(0,${y(0)})`).call(d3.axisBottom(x).tickValues(x.domain().filter(d => d%5===0)));
     g.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.2s')));
     
+    const tip = document.getElementById('p6-tt');
+
     g.selectAll('rect').data(pb).enter().append('rect')
         .attr('x', d => x(d.year))
         .attr('width', x.bandwidth())
-        .attr('y', d => d.net_elec_imports > 0 ? y(d.net_elec_imports) : y(0))
-        .attr('height', d => Math.abs(y(d.net_elec_imports) - y(0)))
-        .attr('fill', d => d.net_elec_imports > 0 ? '#E6A817' : '#1A6B5C');
-    
-    // line overlay for share
-    const maxR = d3.max(pb, d => Math.abs(+d.net_elec_imports_share_demand)) || 1;
+        .attr('y', d => +d.net_elec_imports > 0 ? y(+d.net_elec_imports) : y(0))
+        .attr('height', d => Math.abs(y(+d.net_elec_imports) - y(0)))
+        .attr('fill', d => +d.net_elec_imports > 0 ? '#E6A817' : '#1A6B5C')
+        .on('mousemove', function(event, d) {
+            const v = +d.net_elec_imports;
+            const share = +d.net_elec_imports_share_demand;
+            const isImporter = v >= 0;
+            const color = isImporter ? '#E6A817' : '#1A6B5C';
+            const label = isImporter ? 'Net Importer 📥' : 'Net Exporter 📤';
+            const shareLine = !isNaN(share) ? `<div class="tt-row" style="color:var(--text-md);font-size:0.7rem">% of Demand: ${d3.format(',.1f')(share)}%</div>` : '';
+            showTip(tip, `<div class="tt-title">${d.year}</div><div class="tt-row"><span class="tt-dot" style="background:${color}"></span>${label}</div><div class="tt-row">Net Imports <span class="tt-val">${d3.format(',.1f')(v)} TWh</span></div>${shareLine}`, event);
+        })
+        .on('mouseleave', () => hideTip(tip));
+
     const yR = d3.scaleLinear().domain([-100, 100]).range([ch, 0]);
-    g.append('g').attr('transform', `translate(${cw},0)`).call(d3.axisRight(yR).ticks(5).tickFormat(d=>d+'%'));
-    
+    g.append('g').attr('transform', `translate(${cw},0)`).call(d3.axisRight(yR).ticks(5).tickFormat(d => d + '%'));
     const line = d3.line().defined(d => !isNaN(+d.net_elec_imports_share_demand))
-        .x(d => x(d.year) + x.bandwidth()/2)
+        .x(d => x(d.year) + x.bandwidth() / 2)
         .y(d => yR(+d.net_elec_imports_share_demand));
-        
-    g.append('path').datum(pb).attr('fill', 'none').attr('stroke', '#fff').attr('stroke-width', 1.5).attr('d', line);
+    g.append('path').datum(pb).attr('fill', 'none').attr('stroke', '#fff')
+        .attr('stroke-width', 1.5).style('pointer-events', 'none').attr('d', line);
 }
 
 

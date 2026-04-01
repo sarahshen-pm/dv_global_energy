@@ -175,8 +175,7 @@ Same as map,just ranking and get top10 of metric:
 
 Data: DB.byISO[iso] - all years 1965-2024 for clicked country.
 
-### Panel 1 - Energy Mix (Consumption) [Stacked Area]
-
+### Panel 1 - Energy Consumption [Stacked Area]
 Filter: #p1-filter legend items
 
 | Legend | CSV Column | Color |
@@ -236,8 +235,8 @@ Filter: #p4-filter
 
 | Legend | CSV Column | Axis | Unit | Color |
 |---|---|---|---|---|
-| Cap. Elec | electricity_generation_per_capita | Left | kWh/person | #38b6d8 |
-| Cap. Energy | primary_energy_consumption_per_capita | Left | kWh/person | #fc8d59 |
+| Cap. Elec | per_capita_electricity | Left | kWh/person | #38b6d8 |
+| Cap. Energy | primary_energy_consumption / (population * 10^9) | Left | kWh/billion person | #fc8d59 |
 | Energy/GDP | energy_per_gdp | Right (dashed) | kWh/$ GDP | #d9ef8b |
 
 ### Panel 5 - Emissions [Dual-axis Line, no filter]
@@ -254,9 +253,11 @@ AUDIT: greenhouse_gas_emissions column name may differ. Some OWID versions use t
 | Element | CSV Column | Unit |
 |---|---|---|
 | Bars | net_elec_imports | TWh |
+| Bars | electricity_demand | TWh |
 | Line | net_elec_imports_share_demand | % of demand |
 
 Positive (importer): #E6A817 amber. Negative (exporter): #1A6B5C teal.
+Left Y: TWh
 Right Y: -100% to +100%.
 
 ---
