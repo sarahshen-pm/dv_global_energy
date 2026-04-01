@@ -6,43 +6,97 @@
 /* ── 1. CONSTANTS ─────────────────────────────────────────── */
 const CSV_PATH = 'owid-energy-data.csv';
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json';  // 50m includes small nations like Singapore
-const YEAR_MIN = 1990, YEAR_MAX = 2024;
+const YEAR_MIN = 1965, YEAR_MAX = 2024;
 
 /* ── ENERGY FILTER CONFIG ───────────────────────────────── */
 const FILTER_SOURCES = {
-    renewables: { label: '🌱 Renewables', color: '#43e97b', dir: '+' },
-    fossil: { label: '🏭 Fossil', color: '#c4611a', dir: '-' },
+    all: { label: '🌍 All Sources', color: '#6c7fff', dir: '+' },
+    renewables: { label: '🌱 Renewable', color: '#43e97b', dir: '+' },
+    fossil: { label: '🏭 Fossil fuel', color: '#c4611a', dir: '-' },
     coal: { label: '⚫ Coal', color: '#837060', dir: '-' },
     oil: { label: '🛢️ Oil', color: '#d4721a', dir: '-' },
-    gas: { label: '🔥 Gas', color: '#e2b840', dir: '-' },
+    gas: { label: '🔥 Natural gas', color: '#e2b840', dir: '-' },
     nuclear: { label: '☢️ Nuclear', color: '#7b61ff', dir: '~' },
     hydro: { label: '💧 Hydro', color: '#38b6d8', dir: '+' },
     solar: { label: '☀️ Solar', color: '#f9a826', dir: '+' },
     wind: { label: '💨 Wind', color: '#56de90', dir: '+' },
+    biofuel: { label: '🌿 Biofuel', color: '#8fbe7a', dir: '+' },
+    other_renew: { label: '✨ Other renewable', color: '#56c490', dir: '+' },
 };
 
 // Map energySource + energyMetric → CSV column name
+// Returns a column string, 'FOSSIL_PROD' sentinel, or null (no data).
 function getField() {
     const m = S.energyMetric;
-    const map = {
-        renewables: { share_energy: 'renewables_share_energy', share_elec: 'renewables_share_elec', per_capita: 'renewables_energy_per_capita' },
-        fossil: { share_energy: 'fossil_share_energy', share_elec: 'fossil_share_elec', per_capita: 'fossil_energy_per_capita' },
-        coal: { share_energy: 'coal_share_energy', share_elec: 'coal_share_elec', per_capita: 'coal_energy_per_capita' },
-        oil: { share_energy: 'oil_share_energy', share_elec: 'oil_share_elec', per_capita: 'oil_energy_per_capita' },
-        gas: { share_energy: 'gas_share_energy', share_elec: 'gas_share_elec', per_capita: 'gas_energy_per_capita' },
-        nuclear: { share_energy: 'nuclear_share_energy', share_elec: 'nuclear_share_elec', per_capita: 'nuclear_energy_per_capita' },
-        hydro: { share_energy: 'hydro_share_energy', share_elec: 'hydro_share_elec', per_capita: 'hydro_energy_per_capita' },
-        solar: { share_energy: 'solar_share_energy', share_elec: 'solar_share_elec', per_capita: 'solar_energy_per_capita' },
-        wind: { share_energy: 'wind_share_energy', share_elec: 'wind_share_elec', per_capita: 'wind_energy_per_capita' },
+    const src = S.energySource;
+
+    if (src === 'all') {
+        if (m === 'consumption') return 'primary_energy_consumption';
+        if (m === 'generation')  return 'electricity_generation';
+        return null;
+    }
+
+    const CONS = {
+        fossil: 'fossil_fuel_consumption', coal: 'coal_consumption',
+        oil: 'oil_consumption', gas: 'gas_consumption',
+        renewables: 'renewables_consumption', hydro: 'hydro_consumption',
+        solar: 'solar_consumption', wind: 'wind_consumption',
+        biofuel: 'biofuel_consumption', other_renew: 'other_renewable_consumption',
+        nuclear: 'nuclear_consumption',
     };
-    return map[S.energySource]?.[m] || 'renewables_share_energy';
+    const CONS_SHARE = {
+        fossil: 'fossil_share_energy', coal: 'coal_share_energy',
+        oil: 'oil_share_energy', gas: 'gas_share_energy',
+        renewables: 'renewables_share_energy', hydro: 'hydro_share_energy',
+        solar: 'solar_share_energy', wind: 'wind_share_energy',
+        biofuel: 'biofuel_share_energy', other_renew: 'other_renewables_share_energy',
+        nuclear: 'nuclear_share_energy',
+    };
+    const ELEC = {
+        fossil: 'fossil_electricity', coal: 'coal_electricity',
+        oil: 'oil_electricity', gas: 'gas_electricity',
+        renewables: 'renewables_electricity', hydro: 'hydro_electricity',
+        solar: 'solar_electricity', wind: 'wind_electricity',
+        biofuel: 'biofuel_electricity', other_renew: 'other_renewable_electricity',
+        nuclear: 'nuclear_electricity',
+    };
+    const ELEC_SHARE = {
+        fossil: 'fossil_share_elec', coal: 'coal_share_elec',
+        oil: 'oil_share_elec', gas: 'gas_share_elec',
+        renewables: 'renewables_share_elec', hydro: 'hydro_share_elec',
+        solar: 'solar_share_elec', wind: 'wind_share_elec',
+        biofuel: 'biofuel_share_elec', other_renew: 'other_renew_share_elec',
+        nuclear: 'nuclear_share_elec',
+    };
+
+    if (m === 'consumption')       return CONS[src]       || null;
+    if (m === 'consumption_share') return CONS_SHARE[src] || null;
+    if (m === 'generation')        return ELEC[src]       || null;
+    if (m === 'generation_share')  return ELEC_SHARE[src] || null;
+    if (m === 'production') {
+        if (src === 'fossil') return 'FOSSIL_PROD'; // sentinel: sum of coal+oil+gas
+        if (['coal', 'oil', 'gas'].includes(src)) return `${src}_production`;
+        return null;
+    }
+    return null;
+}
+
+// Resolve a row value for the current field, handling FOSSIL_PROD sentinel
+function getRowValue(row) {
+    if (!row) return NaN;
+    const f = getField();
+    if (!f) return NaN;
+    if (f === 'FOSSIL_PROD') {
+        const v = (+row.coal_production || 0) + (+row.oil_production || 0) + (+row.gas_production || 0);
+        return v || NaN;
+    }
+    return +row[f];
 }
 
 function fmtMetricVal(v) {
     if (v == null || isNaN(v) || v < 0) return 'N/A';
-    return S.energyMetric === 'per_capita'
-        ? `${d3.format(',.0f')(v)} kWh`
-        : `${d3.format('.1f')(v)}%`;
+    if (S.energyMetric && S.energyMetric.includes('share')) return `${d3.format('.1f')(v)}%`;
+    return `${d3.format('.2f')(v)} TWh`;
 }
 
 const ENERGY_SOURCES = [
@@ -69,11 +123,11 @@ const ENERGY_ABS = [
 ];
 
 const TREND_LINES = [
-    { key: 'renewables_share_energy', label: 'Renewables', color: '#43e97b', width: 3 },
-    { key: 'fossil_share_energy', label: 'Fossil', color: '#c4611a', width: 2 },
-    { key: 'nuclear_share_energy', label: 'Nuclear', color: '#7b61ff', width: 1.5 },
-    { key: 'solar_share_energy', label: 'Solar', color: '#f9a826', width: 1.5 },
-    { key: 'wind_share_energy', label: 'Wind', color: '#38d468', width: 1.5 },
+    { key: 'primary_energy_consumption', label: 'Global Consumption', color: '#eef0ff', width: 2.5 },
+    { key: 'fossil_fuel_consumption', label: 'Fossil Consumption', color: '#c4611a', width: 2 },
+    { key: 'fossil_production', label: 'Fossil Production', color: '#837060', width: 2, dasharray: '4,4' },
+    { key: 'fossil_electricity', label: 'Fossil Generation', color: '#d4a827', width: 2 },
+    { key: 'renewables_electricity', label: 'Renewable Generation', color: '#43e97b', width: 2 },
 ];
 const RENEW_LINES = [
     { key: 'renewables_share_energy', label: 'Total RE', color: '#43e97b', width: 2.5 },
@@ -136,12 +190,12 @@ const S = {
     mainISO: null,
     cmpISO: null,
     energySource: 'renewables',   // key in FILTER_SOURCES
-    energyMetric: 'share_energy', // 'share_energy' | 'share_elec' | 'per_capita'
+    energyMetric: 'consumption_share',
 };
 
 /* ── AUTO-PLAY ─────────────────────────────────────────────── */
 let playTimer = null;
-const PLAY_SPEED = 650; // ms per year
+const PLAY_SPEED = 325; // ms per year
 
 function updateSliderUI(year) {
     const slider = document.getElementById('year-slider');
@@ -165,6 +219,7 @@ function startPlay() {
         updateSliderUI(next);
         updateMapColors();
         renderTopCountries();
+        renderSunburst();
     }, PLAY_SPEED);
 }
 
@@ -229,15 +284,6 @@ async function loadAll() {
         return { iso, name, latest };
     }).filter(d => d.latest.primary_energy_consumption > 0);
 
-    // Populate compare dropdown
-    const sel = document.getElementById('compare-select');
-    DB.countryMeta
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .forEach(({ iso, name }) => {
-            const opt = document.createElement('option');
-            opt.value = iso; opt.textContent = name;
-            sel.appendChild(opt);
-        });
 }
 
 /* ── 5. HELPERS ────────────────────────────────────────────── */
@@ -289,36 +335,58 @@ function hideTip(tipEl) { tipEl.classList.remove('visible'); }
 function makeColorScale() {
     const field = getField();
     const src = FILTER_SOURCES[S.energySource];
+    const isFossilProd = field === 'FOSSIL_PROD';
 
-    // 98th-percentile domain from live data (avoids outliers dominating)
-    const vals = DB.countryMeta
-        .map(m => { const r = getCountryRow(m.iso, S.year); return r ? +r[field] : NaN; })
-        .filter(v => !isNaN(v) && v > 0)
-        .sort(d3.ascending);
-    const domMax = vals.length
-        ? (vals[Math.floor(vals.length * 0.98)] || vals[vals.length - 1])
-        : (S.energyMetric === 'per_capita' ? 10000 : 80);
-
-    // Choose interpolator by direction
-    let interp;
-    if (src.dir === '+') {
-        // clean/positive: RdYlGn for renewables/hydro, single-hue for others
-        interp = S.energySource === 'renewables'
-            ? d3.interpolateRdYlGn
-            : d => d3.interpolateLab('#111629', src.color)(d);
-    } else if (src.dir === '-') {
-        // fossil: yellow → red (high = concerning)
-        interp = d3.interpolateYlOrRd;
-    } else {
-        // neutral (nuclear): dark → source color
-        interp = d => d3.interpolateLab('#111629', src.color)(d);
+    // Absolute tracking of max value from ALL countries across ALL years
+    let rawMax = 0;
+    for (const iso in DB.byISO) {
+        DB.byISO[iso].forEach(r => {
+            let v;
+            if (isFossilProd) {
+                v = (+r.coal_production || 0) + (+r.oil_production || 0) + (+r.gas_production || 0);
+            } else {
+                v = +r[field];
+            }
+            if (!isNaN(v) && v > rawMax) rawMax = v;
+        });
     }
-    return d3.scaleSequentialSqrt([0, Math.max(domMax, 1)], interp).clamp(true);
+
+    // Step-wise ceil scaling (e.g., 160566.703 -> 160570)
+    let domMax = 100;
+    if (rawMax > 0) {
+        const step = rawMax > 100 ? 10 : (rawMax > 10 ? 1 : 0.1);
+        domMax = Math.ceil(rawMax / step) * step;
+    }
+
+    // Strict linear mapping from a dark neutral base to the vibrant source color.
+    let interp = d => d3.interpolateLab('#1c2038', src.color)(d);
+
+    if (S.energyMetric && S.energyMetric.includes('share')) {
+        // Expand yellow/green heavily by compressing red/orange into the 0-15% bracket
+        const customDiverging = d3.scaleLinear()
+            .domain([0, 0.05, 0.15, 0.40, 1])
+            .range(['#d73027', '#fc8d59', '#fee08b', '#d9ef8b', '#1a9850'])
+            .interpolate(d3.interpolateLab);
+
+        if (S.energySource === 'renewables' || S.energySource === 'renewable') {
+            interp = d => customDiverging(d);
+        } else if (S.energySource === 'fossil') {
+            interp = d => customDiverging(1 - d);
+        }
+    }
+
+    return d3.scaleSequential([0, domMax || 1], interp).clamp(true);
 }
 
 function updateMapTitle() {
     const src = FILTER_SOURCES[S.energySource];
-    const mLabel = { share_energy: 'Share of Primary Energy', share_elec: 'Share of Electricity', per_capita: 'Per Capita (kWh)' }[S.energyMetric];
+    const mLabel = { 
+        consumption: 'Consumption', 
+        production: 'Production', 
+        generation: 'Generation',
+        consumption_share: 'Consumption %',
+        generation_share: 'Generation %'
+    }[S.energyMetric] || 'Consumption';
     const full = `${src.label} · ${mLabel}`;
     const el = document.getElementById('map-title'); if (el) el.textContent = full;
     const pill = document.getElementById('nav-metric-pill'); if (pill) pill.textContent = full;
@@ -328,9 +396,8 @@ function updateMapTitle() {
 function updateLegend() {
     const cs = makeColorScale();
     const max = cs.domain()[1];
-    const fmt = S.energyMetric === 'per_capita'
-        ? `${Math.round(max).toLocaleString()} kWh`
-        : `${Math.round(max)}%`;
+    const isShare = S.energyMetric && S.energyMetric.includes('share');
+    const fmt = isShare ? `${max.toLocaleString()}%` : `${max.toLocaleString()} TWh`;
     const legMax = document.getElementById('legend-max'); if (legMax) legMax.textContent = fmt;
     const legMin = document.getElementById('legend-min'); if (legMin) legMin.textContent = '0';
     // rebuild gradient from scale
@@ -344,7 +411,7 @@ function updateLegend() {
 function renderMap() {
     const container = document.getElementById('map-container');
     const W = container.clientWidth || 680;
-    const H = Math.max(Math.min(W * 0.54, 430), 300);
+    const H = container.clientHeight || 450;
 
     const svg = d3.select('#world-map')
         .attr('width', W).attr('height', H)
@@ -397,13 +464,13 @@ function renderMap() {
         .attr('fill', d => {
             const iso = ISO_NUM[+d.id];
             const row = iso ? getCountryRow(iso, S.year) : null;
-            const v = row ? +row[field] : NaN;
+            const v = row ? getRowValue(row) : NaN;
             return (!isNaN(v) && v >= 0) ? colorScale(v) : null;
         })
         .classed('no-data', d => {
             const iso = ISO_NUM[+d.id];
             const row = iso ? getCountryRow(iso, S.year) : null;
-            const v = row ? +row[field] : NaN;
+            const v = row ? getRowValue(row) : NaN;
             return isNaN(v) || v < 0;
         })
         .on('mousemove', (event, d) => {
@@ -412,9 +479,12 @@ function renderMap() {
             if (!iso) return;
             const name = row?.country || iso;
             const src = FILTER_SOURCES[S.energySource];
-            const v = row ? +row[field] : NaN;
-            const re = row?.renewables_share_energy;
-            const ff = row?.fossil_share_energy;
+            const v = row ? getRowValue(row) : NaN;
+            
+            const isElec = S.energyMetric && S.energyMetric.includes('generation');
+            const re = isElec ? row?.renewables_share_elec : row?.renewables_share_energy;
+            const ff = isElec ? row?.fossil_share_elec : row?.fossil_share_energy;
+            
             showTip(tip, `
                 <div class="tt-title">${getFlag(iso)} ${name}</div>
                 <div class="tt-row">
@@ -430,7 +500,17 @@ function renderMap() {
         .on('mouseleave', () => hideTip(tip))
         .on('click', (event, d) => {
             const iso = ISO_NUM[+d.id];
-            if (iso && DB.byISO[iso]) showCountryView(iso);
+            console.log("Clicked:", d.id, "→ ISO:", iso);
+            if (!iso) {
+                console.warn("No ISO mapping for id:", d.id);
+                return;
+            }
+            if (!DB.byISO[iso]) {
+                console.warn("No data in DB.byISO for iso:", iso);
+                return;
+            }
+            console.log("Entering showCountryView for", iso);
+            showCountryView(iso);
         });
 
     // ── Country borders (Observable topojson.mesh technique) ─
@@ -467,112 +547,271 @@ function renderMap() {
 
 function updateMapColors() {
     const colorScale = makeColorScale();
-    const field = getField();
     d3.select('#world-map').select('.countries-g').selectAll('.country-path')
         .transition().duration(350)
         .attr('fill', d => {
             const iso = ISO_NUM[+d.id];
             const row = iso ? getCountryRow(iso, S.year) : null;
-            const v = row ? +row[field] : NaN;
+            const v = row ? getRowValue(row) : NaN;
             return (!isNaN(v) && v >= 0) ? colorScale(v) : null;
         })
         .each(function (d) {
             const iso = ISO_NUM[+d.id];
             const row = iso ? getCountryRow(iso, S.year) : null;
-            const v = row ? +row[field] : NaN;
+            const v = row ? getRowValue(row) : NaN;
             d3.select(this).classed('no-data', isNaN(v) || v < 0);
         });
     updateMapTitle();
     updateLegend();
+    renderTopCountries();
 }
 
 /* ── 7. GLOBAL TREND LINE CHART ───────────────────────────── */
-function renderTrendChart() {
-    const card = document.getElementById('card-trend');
-    const W = (card.clientWidth || 300) - 32;
-    const H = 200;
-    const margin = { top: 10, right: 15, bottom: 28, left: 38 };
-    const iW = W - margin.left - margin.right;
-    const iH = H - margin.top - margin.bottom;
+/* ── 7. ZOOMABLE SUNBURST ─────────────────────────────────── */
+function buildSunburstData(year) {
+    const row = getWorldRow(year);
+    if (!row) return null;
 
-    const svg = d3.select('#trend-chart')
-        .attr('width', W).attr('height', H);
+    const isProd = S.energyMetric === 'production';
+    const isGen  = S.energyMetric && S.energyMetric.includes('generation');
+
+    function v(key) {
+        const val = +row[key];
+        return isNaN(val) || val < 0 ? 0 : val;
+    }
+
+    if (isProd) {
+        // Production mode: only Fossil ring with Coal/Oil/Gas children
+        return {
+            name: 'World',
+            children: [
+                {
+                    name: 'Fossil',
+                    color: '#c4611a',
+                    children: [
+                        { name: 'Coal', color: '#837060', value: v('coal_production') },
+                        { name: 'Oil',  color: '#d4721a', value: v('oil_production') },
+                        { name: 'Gas',  color: '#e2b840', value: v('gas_production') },
+                    ].filter(d => d.value > 0)
+                },
+            ].filter(d => d.children && d.children.length > 0)
+        };
+    }
+
+    const suffix = isGen ? '_electricity' : '_consumption';
+
+    return {
+        name: 'World',
+        children: [
+            {
+                name: 'Renewable',
+                color: '#43e97b',
+                children: [
+                    { name: 'Hydro',    color: '#38b6d8', value: v('hydro'            + suffix) },
+                    { name: 'Solar',    color: '#f9a826', value: v('solar'            + suffix) },
+                    { name: 'Wind',     color: '#56de90', value: v('wind'             + suffix) },
+                    { name: 'Biofuel',  color: '#8fbe7a', value: v('biofuel'          + suffix) },
+                    { name: 'Other RE', color: '#56c490', value: v('other_renewable'  + suffix) },
+                ].filter(d => d.value > 0)
+            },
+            {
+                name: 'Fossil',
+                color: '#c4611a',
+                children: [
+                    { name: 'Coal', color: '#837060', value: v('coal' + suffix) },
+                    { name: 'Oil',  color: '#d4721a', value: v('oil'  + suffix) },
+                    { name: 'Gas',  color: '#e2b840', value: v('gas'  + suffix) },
+                ].filter(d => d.value > 0)
+            },
+            {
+                name: 'Nuclear',
+                color: '#7b61ff',
+                children: [
+                    { name: 'Nuclear', color: '#9d8aff', value: v('nuclear' + suffix) },
+                ].filter(d => d.value > 0)
+            },
+        ].filter(d => d.children && d.children.length > 0 && d.children.reduce((s,c) => s + c.value, 0) > 0)
+    };
+}
+
+function renderSunburst() {
+    const container = document.getElementById('sunburst-container');
+    if (!container) return;
+    const W = container.clientWidth || 260;
+    const H = container.clientHeight || 260;
+    // Use 72% of the available space so the ring looks compact
+    const size = Math.min(W, H) * 0.72;
+    const radius = size / 6;
+
+    const data = buildSunburstData(S.year);
+    if (!data) return;
+
+    const yearLabel = document.getElementById('sunburst-year-label');
+    if (yearLabel) yearLabel.textContent = S.year;
+
+    const svg = d3.select('#sunburst-svg')
+        .attr('viewBox', [-size / 2, -size / 2, size, size])
+        .style('font', '8px var(--font)');
+
     svg.selectAll('*').remove();
 
-    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    const hierarchy = d3.hierarchy(data)
+        .sum(d => d.value)
+        .sort((a, b) => b.value - a.value);
 
-    const years = DB.worldRows.map(r => r.year);
-    const xScale = d3.scaleLinear().domain(d3.extent(years)).range([0, iW]);
-    const yScale = d3.scaleLinear().domain([0, 100]).range([iH, 0]);
+    const root = d3.partition()
+        .size([2 * Math.PI, hierarchy.height + 1])(hierarchy);
 
-    g.append('g').attr('transform', `translate(0,${iH})`).call(
-        d3.axisBottom(xScale).ticks(6).tickFormat(d3.format('d'))
-    );
-    g.append('g').call(d3.axisLeft(yScale).ticks(5).tickFormat(d => d + '%'));
+    root.each(d => d.current = d);
 
-    const tip = document.getElementById('trend-tooltip');
-    const bisect = d3.bisector(r => r.year).left;
+    const arc = d3.arc()
+        .startAngle(d => d.x0)
+        .endAngle(d => d.x1)
+        .padAngle(d => Math.min((d.x1 - d.x0) / 2, 0.004))
+        .padRadius(radius * 1.5)
+        .innerRadius(d => d.y0 * radius)
+        .outerRadius(d => Math.max(d.y0 * radius, d.y1 * radius - 1));
 
-    // Draw lines
-    TREND_LINES.forEach(({ key, color, width }) => {
-        const lineGen = d3.line()
-            .defined(r => r[key] != null && !isNaN(r[key]))
-            .x(r => xScale(r.year))
-            .y(r => yScale(+r[key]))
-            .curve(d3.curveMonotoneX);
+    // Color: use node's own color if defined, else parent's
+    function getColor(d) {
+        if (d.data.color) return d.data.color;
+        if (d.parent && d.parent.data.color) return d.parent.data.color;
+        return '#6c7fff';
+    }
 
-        g.append('path')
-            .datum(DB.worldRows)
-            .attr('class', 'line-path')
-            .attr('stroke', color)
-            .attr('stroke-width', width)
-            .attr('d', lineGen)
-            .attr('opacity', 0.9);
-    });
+    const tip = document.getElementById('sb-tooltip');
 
-    // Crosshair overlay
-    const overlay = g.append('rect')
-        .attr('width', iW).attr('height', iH)
-        .attr('fill', 'transparent');
+    const path = svg.append('g')
+        .selectAll('path')
+        .data(root.descendants().slice(1))
+        .join('path')
+        .attr('fill', d => getColor(d))
+        .attr('fill-opacity', d => arcVisible(d.current) ? (d.children ? 0.75 : 0.55) : 0)
+        .attr('pointer-events', d => arcVisible(d.current) ? 'auto' : 'none')
+        .attr('d', d => arc(d.current))
+        .style('cursor', d => d.children ? 'pointer' : 'default');
 
-    const crosshair = g.append('line').attr('class', 'crosshair').attr('y1', 0).attr('y2', iH).style('display', 'none');
+    path.filter(d => d.children).on('click', clicked);
 
-    overlay.on('mousemove', (event) => {
-        const [mx] = d3.pointer(event);
-        const year = Math.round(xScale.invert(mx));
-        const row = getWorldRow(year);
-        if (!row) return;
-        crosshair.style('display', null).attr('x1', xScale(row.year)).attr('x2', xScale(row.year));
-        const rows = TREND_LINES.map(l => `
-      <div class="tt-row">
-        <span class="tt-dot" style="background:${l.color}"></span>
-        ${l.label} <span class="tt-val">${fmtPct(row[l.key])}</span>
-      </div>`).join('');
-        showTip(tip, `<div class="tt-title">${year}</div>${rows}`, event);
-    }).on('mouseleave', () => { crosshair.style('display', 'none'); hideTip(tip); });
+    // Floating tooltip on hover
+    path.on('mousemove', (event, d) => {
+        const total = root.value || 1;
+        const pct = ((d.value / total) * 100).toFixed(1);
+        const fmt = d3.format(',.0f');
+        const isGen = S.energyMetric && S.energyMetric.includes('generation');
+        const unit = isGen ? 'TWh elec' : 'TWh';
+        // Build ancestry path label
+        const ancestors = d.ancestors().reverse().slice(1).map(a => a.data.name).join(' › ');
+        const color = getColor(d);
+        showTip(tip, `
+            <div class="tt-title">${ancestors}</div>
+            <div class="tt-row">
+                <span class="tt-dot" style="background:${color}"></span>
+                Share <span class="tt-val">${pct}%</span>
+            </div>
+            <div class="tt-row" style="color:var(--text-md);font-size:0.7rem;">${fmt(d.value)} ${unit}</div>
+        `, event);
+    }).on('mouseleave', () => hideTip(tip));
 
-    // Legend
-    const legEl = document.getElementById('trend-legend');
-    legEl.innerHTML = TREND_LINES.map(l => `
-    <span class="leg-item">
-      <span class="leg-swatch" style="background:${l.color}"></span>${l.label}
-    </span>`).join('');
+    // Labels — smaller font
+    const label = svg.append('g')
+        .attr('pointer-events', 'none')
+        .attr('text-anchor', 'middle')
+        .style('user-select', 'none')
+        .selectAll('text')
+        .data(root.descendants().slice(1))
+        .join('text')
+        .attr('dy', '0.35em')
+        .attr('fill', '#fff')
+        .attr('fill-opacity', d => +labelVisible(d.current))
+        .attr('transform', d => labelTransform(d.current))
+        .style('font-size', d => d.depth === 1 ? '7px' : '6px')
+        .style('font-weight', d => d.depth === 1 ? '600' : '400')
+        .text(d => d.data.name);
+
+    // Center back-click circle
+    const parent = svg.append('circle')
+        .datum(root)
+        .attr('r', radius)
+        .attr('fill', 'none')
+        .attr('pointer-events', 'all')
+        .style('cursor', 'pointer')
+        .on('click', clicked);
+
+    function clicked(event, p) {
+        parent.datum(p.parent || root);
+
+        root.each(d => d.target = {
+            x0: Math.max(0, Math.min(1, (d.x0 - p.x0) / (p.x1 - p.x0))) * 2 * Math.PI,
+            x1: Math.max(0, Math.min(1, (d.x1 - p.x0) / (p.x1 - p.x0))) * 2 * Math.PI,
+            y0: Math.max(0, d.y0 - p.depth),
+            y1: Math.max(0, d.y1 - p.depth),
+        });
+
+        const t = svg.transition().duration(750);
+
+        path.transition(t)
+            .tween('data', d => {
+                const i = d3.interpolate(d.current, d.target);
+                return t => d.current = i(t);
+            })
+            .filter(function(d) {
+                return +this.getAttribute('fill-opacity') || arcVisible(d.target);
+            })
+            .attr('fill-opacity', d => arcVisible(d.target) ? (d.children ? 0.75 : 0.55) : 0)
+            .attr('pointer-events', d => arcVisible(d.target) ? 'auto' : 'none')
+            .attrTween('d', d => () => arc(d.current));
+
+        label.filter(function(d) {
+            return +this.getAttribute('fill-opacity') || labelVisible(d.target);
+        }).transition(t)
+            .attr('fill-opacity', d => +labelVisible(d.target))
+            .attrTween('transform', d => () => labelTransform(d.current));
+    }
+
+    function arcVisible(d) {
+        return d.y1 <= 3 && d.y0 >= 1 && d.x1 > d.x0;
+    }
+    function labelVisible(d) {
+        return d.y1 <= 3 && d.y0 >= 1 && (d.y1 - d.y0) * (d.x1 - d.x0) > 0.05;
+    }
+    function labelTransform(d) {
+        const x = (d.x0 + d.x1) / 2 * 180 / Math.PI;
+        const y = (d.y0 + d.y1) / 2 * radius;
+        return `rotate(${x - 90}) translate(${y},0) rotate(${x < 180 ? 0 : 180})`;
+    }
 }
+
 
 /* ── 8. TOP COUNTRIES ─────────────────────────────────────── */
 function renderTopCountries() {
     const listEl = document.getElementById('top-list');
-    const isGreen = S.topTab === 'green';
-    const KEY = isGreen ? 'renewables_share_energy' : 'fossil_share_energy';
-    const COLOR = isGreen ? '#43e97b' : '#c4611a';
+    const field = getField();
+    const color = FILTER_SOURCES[S.energySource]?.color || '#6c7fff';
+    const isFossilProd = field === 'FOSSIL_PROD';
+    const isShare = S.energyMetric === 'consumption_share' || S.energyMetric === 'generation_share';
+
+    if (!field) { listEl.innerHTML = ''; return; }
 
     const data = DB.countryMeta
-        .map(d => ({ ...d, val: d.latest[KEY] }))
-        .filter(d => d.val != null && !isNaN(d.val))
-        .sort((a, b) => isGreen ? b.val - a.val : b.val - a.val)
-        .slice(0, 6);
+        .map(d => {
+            const r = getCountryRow(d.iso, S.year);
+            if (!r) return null;
+            let val;
+            if (isFossilProd) {
+                val = (+r.coal_production || 0) + (+r.oil_production || 0) + (+r.gas_production || 0);
+                if (!val) val = NaN;
+            } else {
+                val = +r[field];
+            }
+            return { ...d, val };
+        })
+        .filter(d => Boolean(d) && !isNaN(d.val) && d.val > 0)
+        .sort((a, b) => b.val - a.val)
+        .slice(0, 10);
 
     const maxVal = d3.max(data, d => d.val) || 1;
+    const fmt = isShare ? v => `${d3.format('.1f')(v)}%` : v => `${d3.format('.2s')(v)} TWh`;
 
     listEl.innerHTML = data.map((d, i) => `
     <div class="top-item">
@@ -580,539 +819,457 @@ function renderTopCountries() {
       <span class="top-flag">${getFlag(d.iso)}</span>
       <span class="top-name">${d.name}</span>
       <div class="top-bar-wrap">
-        <div class="top-bar" style="width:${(d.val / maxVal * 100).toFixed(1)}%;background:${COLOR}"></div>
+        <div class="top-bar" style="width:${(d.val / maxVal * 100).toFixed(1)}%;background:${color}"></div>
       </div>
-      <span class="top-val" style="color:${COLOR}">${fmt(d.val)}%</span>
+      <span class="top-val" style="color:${color}">${fmt(d.val)}</span>
     </div>`).join('');
 }
 
-/* ── 9. GLOBAL STACKED AREA CHART ─────────────────────────── */
-function renderAreaChart() {
-    const section = document.querySelector('.area-section');
-    const W = (section?.clientWidth || 800) - 40;
-    const H = 230;
-    const margin = { top: 10, right: 20, bottom: 32, left: 48 };
-    const iW = W - margin.left - margin.right;
-    const iH = H - margin.top - margin.bottom;
 
-    const svg = d3.select('#area-chart').attr('width', W).attr('height', H);
-    svg.selectAll('*').remove();
 
-    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-
-    const sources = S.globalMode === 'relative' ? ENERGY_SOURCES : ENERGY_ABS;
-    const dataRows = DB.worldRows.filter(r => r.year >= YEAR_MIN && r.year <= YEAR_MAX);
-
-    // Normalize if relative
-    const stackData = dataRows.map(r => {
-        const obj = { year: r.year };
-        if (S.globalMode === 'relative') {
-            const total = sources.reduce((s, e) => s + (+r[e.key] || 0), 0);
-            sources.forEach(e => obj[e.key] = total > 0 ? (+r[e.key] || 0) / total * 100 : 0);
-        } else {
-            sources.forEach(e => obj[e.key] = +r[e.key] || 0);
-        }
-        return obj;
-    });
-
-    const stack = d3.stack().keys(sources.map(e => e.key)).order(d3.stackOrderNone).offset(d3.stackOffsetNone);
-    const series = stack(stackData);
-
-    const xScale = d3.scaleLinear().domain([YEAR_MIN, YEAR_MAX]).range([0, iW]);
-    const yMax = S.globalMode === 'relative' ? 100 : d3.max(series[series.length - 1], d => d[1]);
-    const yScale = d3.scaleLinear().domain([0, yMax]).range([iH, 0]);
-
-    g.append('g').attr('transform', `translate(0,${iH})`).call(
-        d3.axisBottom(xScale).ticks(8).tickFormat(d3.format('d'))
-    );
-    g.append('g').call(
-        d3.axisLeft(yScale).ticks(5).tickFormat(d => S.globalMode === 'relative' ? d + '%' : d3.format('.2s')(d))
-    );
-
-    const area = d3.area()
-        .x(d => xScale(d.data.year))
-        .y0(d => yScale(d[0]))
-        .y1(d => yScale(d[1]))
-        .curve(d3.curveMonotoneX);
-
-    const tip = document.getElementById('area-tooltip');
-    const bisect = d3.bisector(d => d.data.year).left;
-
-    g.selectAll('.area-path')
-        .data(series)
-        .join('path')
-        .attr('class', 'area-path')
-        .attr('fill', (d, i) => sources[i].color)
-        .attr('d', area);
-
-    // Crosshair overlay
-    g.append('rect').attr('width', iW).attr('height', iH).attr('fill', 'transparent')
-        .on('mousemove', (event) => {
-            const [mx] = d3.pointer(event);
-            const year = Math.round(xScale.invert(mx));
-            const row = stackData.find(d => d.year === year);
-            if (!row) return;
-            const rows = sources.map(e => `
-        <div class="tt-row">
-          <span class="tt-dot" style="background:${e.color}"></span>
-          ${e.label} <span class="tt-val">${S.globalMode === 'relative' ? fmt(row[e.key]) + '%' : d3.format('.1f')(row[e.key]) + ' TWh'}</span>
-        </div>`).join('');
-            showTip(tip, `<div class="tt-title">${year}</div>${rows}`, event);
-        })
-        .on('mouseleave', () => hideTip(tip));
-
-    // Legend
-    const legEl = document.getElementById('area-legend');
-    legEl.innerHTML = sources.map(e => `
-    <span class="leg-item">
-      <span class="leg-swatch" style="background:${e.color}"></span>${e.label}
-    </span>`).join('');
-}
-
-/* ── 10. SHOW COUNTRY VIEW ────────────────────────────────── */
+/* ── 8. COUNTRY VIEW (6 PANELS) ───────────────────────── */
 function showCountryView(iso) {
+    if (!iso || !DB.byISO[iso]) return;
+    
+    // Switch Views
     S.mainISO = iso;
     document.getElementById('view-global').classList.add('hidden');
-    const cv = document.getElementById('view-country');
-    cv.classList.remove('hidden');
-
-    const rows = DB.byISO[iso];
-    const latestRow = getCountryRow(iso, S.year) || rows[rows.length - 1];
-    document.getElementById('c-flag').textContent = getFlag(iso);
-    document.getElementById('c-name').textContent = latestRow.country;
-    document.getElementById('donut-title').textContent = `Energy Mix — ${latestRow.country}`;
-    document.getElementById('history-title').textContent = `Energy History — ${latestRow.country}`;
-
-    renderKPIs(iso);
-    renderDonut(iso, S.year);
-    renderRenewGrowth(iso);
-    renderCountryArea(iso);
-    renderCompareChart();
+    const view = document.getElementById('view-country');
+    view.classList.remove('hidden');
+    
+    // Close comparison mode
+    S.cmpISO = null; 
+    const row = getCountryRow(iso, S.year) || DB.countryMeta.find(m => m.iso===iso)?.latest;
+    const name = row?.country || iso;
+    
+    const flagEl = document.getElementById('c-flag'); if (flagEl) flagEl.textContent = getFlag(iso);
+    const nameEl = document.getElementById('c-name'); if (nameEl) nameEl.textContent = name;
+    
+    setupPanelWatchers(iso);
+    
+    // Render all 6 panels
+    renderPanelMix(iso);
+    renderPanelElec(iso);
+    renderPanelFossil(iso);
+    renderPanelEcon(iso);
+    renderPanelCO2(iso);
+    renderPanelImport(iso);
 }
 
-/* ── 11. KPI STRIP ───────────────────────────────────────── */
-function renderKPIs(iso) {
-    const row = getCountryRow(iso, S.year) || DB.byISO[iso]?.slice(-1)[0];
-    if (!row) return;
-    const cmpRow = S.cmpISO ? (getCountryRow(S.cmpISO, S.year) || DB.byISO[S.cmpISO]?.slice(-1)[0]) : null;
 
-    const kpis = [
-        { label: 'Renewable Share', val: fmtPct(row.renewables_share_energy), unit: 'of total energy', cmp: cmpRow ? fmtPct(cmpRow.renewables_share_energy) : null },
-        { label: 'Carbon Intensity', val: fmt(row.carbon_intensity_elec, 0), unit: 'g CO₂/kWh (electricity)', cmp: cmpRow ? fmt(cmpRow.carbon_intensity_elec, 0) : null },
-        { label: 'Energy per Capita', val: fmt(row.energy_per_capita, 0), unit: 'kWh per person', cmp: cmpRow ? fmt(cmpRow.energy_per_capita, 0) : null },
-        { label: 'Total Consumption', val: d3.format('.3s')(row.primary_energy_consumption || 0), unit: 'TWh primary energy', cmp: cmpRow ? d3.format('.3s')(cmpRow.primary_energy_consumption || 0) : null },
-    ];
+// Global watchers state for panels
+const P_STATE = {
+    p3Mode: 'abs'
+};
 
-    const cm = cmpRow ? getCountryRow(S.cmpISO, S.year) : null;
-    document.getElementById('kpi-strip').innerHTML = kpis.map(k => `
-    <div class="kpi-card">
-      <div class="kpi-label">${k.label}</div>
-      <div class="kpi-val">${k.val}</div>
-      <div class="kpi-unit">${k.unit}</div>
-      ${k.cmp ? `<div class="kpi-unit" style="color:#f9a826;margin-top:.3rem">${S.cmpISO}: ${k.cmp}</div>` : ''}
-    </div>`).join('');
+function setupPanelWatchers(iso) {
+    d3.selectAll('.custom-legend .leg-item').on('click', function() {
+        const el = d3.select(this);
+        el.classed('active', !el.classed('active'));
+        const parentId = this.parentNode.id;
+        if(parentId === 'p1-filter') renderPanelMix(iso);
+        else if(parentId === 'p2-filter') renderPanelElec(iso);
+        else if(parentId === 'p3-filter') renderPanelFossil(iso);
+        else if(parentId === 'p4-filter') renderPanelEcon(iso);
+    });
+
+    d3.select('#p2-share-cb').on('change', () => renderPanelElec(iso));
+    
+    d3.select('#p3-mode-abs').on('click', function() {
+        P_STATE.p3Mode = 'abs';
+        d3.selectAll('#p3-fossil .tog').classed('active', false);
+        d3.select(this).classed('active', true);
+        renderPanelFossil(iso);
+    });
+    d3.select('#p3-mode-yoy').on('click', function() {
+        P_STATE.p3Mode = 'yoy';
+        d3.selectAll('#p3-fossil .tog').classed('active', false);
+        d3.select(this).classed('active', true);
+        renderPanelFossil(iso);
+    });
 }
 
-/* ── 12. DONUT CHART ─────────────────────────────────────── */
-function renderDonut(iso, year) {
-    const card = document.querySelector('.donut-card');
-    const size = Math.min(card?.clientWidth || 240, 240);
-    const R = size / 2 - 10;
-    const innerR = R * 0.52;
+// Layout helper
+function getDims(id) {
+    const el = document.getElementById(id);
+    const W = el.parentElement.clientWidth || 300;
+    let H = el.clientHeight;
+    if (!H || H < 50) {
+        H = el.parentElement.clientHeight ? el.parentElement.clientHeight - 80 : 240;
+    }
+    return { W, H, margin: { top: 20, right: 60, bottom: 30, left: 60 } };
+}
 
-    const svg = d3.select('#donut-chart')
-        .attr('width', size).attr('height', size);
+/* ── PANEL 1: ENERGY MIX (CONSUMPTION) ────────────────────── */
+function renderPanelMix(iso) {
+    const data = DB.byISO[iso];
+    const {W, H, margin} = getDims('p1-svg');
+    const svg = d3.select('#p1-svg').attr('width', W).attr('height', H);
     svg.selectAll('*').remove();
-
-    const g = svg.append('g').attr('transform', `translate(${size / 2},${size / 2})`);
-
-    const row = getCountryRow(iso, year);
-    if (!row) return;
-
-    const data = ENERGY_SOURCES
-        .map(e => ({ key: e.key, label: e.label, color: e.color, value: +row[e.key] || 0 }))
-        .filter(d => d.value > 0.1);
-
-    const total = d3.sum(data, d => d.value);
-
-    const pie = d3.pie().value(d => d.value).sort(null);
-    const arc = d3.arc().innerRadius(innerR).outerRadius(R);
-    const arcHover = d3.arc().innerRadius(innerR - 2).outerRadius(R + 6);
-
-    g.selectAll('path')
-        .data(pie(data))
-        .join('path')
-        .attr('fill', d => d.data.color)
-        .attr('d', arc)
-        .attr('stroke', '#111629').attr('stroke-width', 1.5)
-        .on('mouseover', function (event, d) {
-            d3.select(this).attr('d', arcHover);
-            document.getElementById('donut-center').innerHTML = `
-        <div class="donut-big">${fmt(d.data.value)}%</div>
-        <div class="donut-sub">${d.data.label}</div>`;
+    
+    const cw = W - margin.left - margin.right;
+    const ch = H - margin.top - margin.bottom;
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const keys = [];
+    document.querySelectorAll('#p1-filter .leg-item.active').forEach(e => {
+        keys.push(e.dataset.val + '_consumption');
+    });
+    
+    if(!keys.length) return; // none selected
+    
+    const stack = d3.stack().keys(keys).value((d, key) => isNaN(+d[key]) ? 0 : +d[key])(data);
+    
+    const x = d3.scaleLinear().domain([YEAR_MIN, YEAR_MAX]).range([0, cw]);
+    const maxVal = d3.max(stack, layer => d3.max(layer, d => d[1])) || 1;
+    const y = d3.scaleLinear().domain([0, maxVal]).range([ch, 0]).nice();
+    
+    g.append('g').attr('transform', `translate(0,${ch})`).call(d3.axisBottom(x).tickFormat(d3.format('d')).ticks(5));
+    g.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(d => d3.format('.2s')(d)));
+    
+    const colorMap = {
+        'coal_consumption': '#837060', 'oil_consumption': '#d4721a', 'gas_consumption': '#e2b840',
+        'nuclear_consumption': '#7b61ff',
+        'hydro_consumption': '#38b6d8', 'solar_consumption': '#f9a826', 'wind_consumption': '#56de90',
+        'biofuel_consumption': '#8fbe7a', 'other_renewable_consumption': '#56c490'
+    };
+    
+    const area = d3.area()
+        .x(d => x(d.data.year))
+        .y0(d => y(d[0]))
+        .y1(d => y(d[1]));
+        
+    g.selectAll('.layer').data(stack).enter().append('path')
+        .attr('class', 'layer')
+        .attr('d', area)
+        .style('fill', d => colorMap[d.key] || '#999')
+        .style('opacity', 0.85)
+        .on('mousemove', function(event, d) {
+            d3.selectAll('.layer').style('opacity', 0.2);
+            d3.select(this).style('opacity', 1);
         })
-        .on('mouseout', function (event, d) {
-            d3.select(this).attr('d', arc);
-            const re = row.renewables_share_energy;
-            document.getElementById('donut-center').innerHTML = `
-        <div class="donut-big">${fmt(re)}%</div>
-        <div class="donut-sub">Renewable</div>`;
+        .on('mouseleave', function() {
+            d3.selectAll('.layer').style('opacity', 0.85);
         });
-
-    const re = row.renewables_share_energy;
-    document.getElementById('donut-center').innerHTML = `
-    <div class="donut-big">${fmt(re)}%</div>
-    <div class="donut-sub">Renewable</div>`;
-
-    document.getElementById('donut-legend').innerHTML = data.map(d => `
-    <span class="leg-item">
-      <span class="leg-swatch" style="background:${d.color}"></span>${d.label} ${fmt(d.value)}%
-    </span>`).join('');
 }
 
-/* ── 13. RENEWABLE GROWTH CHART ──────────────────────────── */
-function renderRenewGrowth(iso) {
-    const card = document.querySelector('.renew-card');
-    const W = (card?.clientWidth || 340) - 32;
-    const H = 210;
-    const m = { top: 10, right: 15, bottom: 28, left: 38 };
-    const iW = W - m.left - m.right, iH = H - m.top - m.bottom;
-
-    const svg = d3.select('#renew-chart').attr('width', W).attr('height', H);
+/* ── PANEL 2: ELECTRICITY GENERATION ──────────────────────── */
+function renderPanelElec(iso) {
+    const data = DB.byISO[iso];
+    const {W, H, margin} = getDims('p2-svg');
+    const svg = d3.select('#p2-svg').attr('width', W).attr('height', H);
     svg.selectAll('*').remove();
-    const g = svg.append('g').attr('transform', `translate(${m.left},${m.top})`);
-
-    const rows = DB.byISO[iso] || [];
-    const cmpRows = S.cmpISO ? (DB.byISO[S.cmpISO] || []) : [];
-    const allRows = [...rows, ...cmpRows];
-    const yMax = d3.max(allRows, r => d3.max(RENEW_LINES, l => +r[l.key] || 0)) || 10;
-
-    const xScale = d3.scaleLinear().domain([YEAR_MIN, YEAR_MAX]).range([0, iW]);
-    const yScale = d3.scaleLinear().domain([0, yMax * 1.08]).range([iH, 0]);
-
-    g.append('g').attr('transform', `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(6).tickFormat(d3.format('d')));
-    g.append('g').call(d3.axisLeft(yScale).ticks(5).tickFormat(d => d + '%'));
-
-    const tip = document.getElementById('renew-tooltip');
-
-    function drawLines(data, dasharray) {
-        RENEW_LINES.forEach(({ key, color, width }) => {
-            const lineGen = d3.line()
-                .defined(r => r[key] != null && !isNaN(r[key]))
-                .x(r => xScale(r.year))
-                .y(r => yScale(+r[key]))
-                .curve(d3.curveMonotoneX);
+    
+    const cw = W - margin.left - margin.right;
+    const ch = H - margin.top - margin.bottom;
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const keys = [];
+    document.querySelectorAll('#p2-filter .leg-item.active').forEach(e => {
+        keys.push(e.dataset.val + '_electricity');
+    });
+    const showShare = document.getElementById('p2-share-cb').checked;
+    
+    if(!keys.length) return;
+    
+    const stack = d3.stack().keys(keys).value((d, key) => isNaN(+d[key]) ? 0 : +d[key])(data);
+    
+    const x = d3.scaleBand().domain(data.map(d=>d.year)).range([0, cw]).padding(0.1);
+    const maxVal = d3.max(stack, layer => d3.max(layer, d => d[1])) || 1;
+    const y = d3.scaleLinear().domain([0, maxVal]).range([ch, 0]).nice();
+    
+    g.append('g').attr('transform', `translate(0,${ch})`)
+     .call(d3.axisBottom(x).tickValues(x.domain().filter(d => d%5===0)));
+    g.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(d => d3.format('.2s')(d)));
+    
+    const colorMap = {
+        'coal_electricity': '#837060', 'oil_electricity': '#d4721a', 'gas_electricity': '#e2b840',
+        'nuclear_electricity': '#7b61ff',
+        'hydro_electricity': '#38b6d8', 'solar_electricity': '#f9a826', 'wind_electricity': '#56de90',
+        'biofuel_electricity': '#8fbe7a', 'other_renewable_electricity': '#56c490'
+    };
+    
+    g.selectAll('.serie').data(stack).enter().append('g')
+        .attr('fill', d => colorMap[d.key] || '#999')
+        .selectAll('rect').data(d => d).enter().append('rect')
+        .attr('x', d => x(d.data.year))
+        .attr('y', d => y(d[1]))
+        .attr('height', d => y(d[0]) - y(d[1]))
+        .attr('width', x.bandwidth());
+        
+    if(showShare) {
+        // Implement share overlay lines
+        const yRight = d3.scaleLinear().domain([0, 100]).range([ch, 0]);
+        g.append('g').attr('transform', `translate(${cw},0)`).call(d3.axisRight(yRight).ticks(5).tickFormat(d=>d+'%'));
+        
+        keys.forEach(k => {
+            const shareKey = k.replace('_electricity', '_share_elec');
+            const line = d3.line()
+                .defined(d => !isNaN(d[shareKey]))
+                .x(d => x(d.year) + x.bandwidth()/2)
+                .y(d => yRight(d[shareKey]));
             g.append('path')
                 .datum(data)
-                .attr('class', 'line-path')
-                .attr('stroke', color)
-                .attr('stroke-width', width)
-                .attr('stroke-dasharray', dasharray)
-                .attr('d', lineGen);
+                .attr('fill', 'none')
+                .attr('stroke', colorMap[k]||'#fff')
+                .attr('stroke-width', 2)
+                .attr('d', line);
         });
     }
-    drawLines(rows, null);
-    if (cmpRows.length) drawLines(cmpRows, '5,3');
-
-    g.append('rect').attr('width', iW).attr('height', iH).attr('fill', 'transparent')
-        .on('mousemove', (event) => {
-            const [mx] = d3.pointer(event);
-            const year = Math.round(xScale.invert(mx));
-            const r1 = rows.find(r => r.year === year);
-            if (!r1) return;
-            let html = `<div class="tt-title">${year}</div>`;
-            RENEW_LINES.forEach(l => {
-                html += `<div class="tt-row"><span class="tt-dot" style="background:${l.color}"></span>${l.label} <span class="tt-val">${fmtPct(r1[l.key])}</span></div>`;
-            });
-            showTip(tip, html, event);
-        }).on('mouseleave', () => hideTip(tip));
-
-    document.getElementById('renew-legend').innerHTML = RENEW_LINES.map(l => `
-    <span class="leg-item"><span class="leg-swatch" style="background:${l.color}"></span>${l.label}</span>`).join('');
 }
 
-/* ── 14. COUNTRY STACKED AREA ────────────────────────────── */
-function renderCountryArea(iso) {
-    const W = ((document.querySelector('.country-card')?.clientWidth || document.querySelector('#view-country')?.clientWidth || 800)) - 40;
-    const H = 220;
-    const m = { top: 10, right: 20, bottom: 30, left: 48 };
-    const iW = W - m.left - m.right, iH = H - m.top - m.bottom;
-
-    const svg = d3.select('#country-area-chart').attr('width', W).attr('height', H);
+/* ── PANEL 3: FOSSIL PRODUCTION ──────────────────────────── */
+function renderPanelFossil(iso) {
+    const data = DB.byISO[iso];
+    const {W, H, margin} = getDims('p3-svg');
+    const svg = d3.select('#p3-svg').attr('width', W).attr('height', H);
     svg.selectAll('*').remove();
-    const g = svg.append('g').attr('transform', `translate(${m.left},${m.top})`);
-
-    const rows = DB.byISO[iso] || [];
-    const sources = S.countryMode === 'relative' ? ENERGY_SOURCES : ENERGY_ABS;
-
-    const stackData = rows.map(r => {
-        const obj = { year: r.year };
-        if (S.countryMode === 'relative') {
-            const total = sources.reduce((s, e) => s + (+r[e.key] || 0), 0);
-            sources.forEach(e => obj[e.key] = total > 0 ? (+r[e.key] || 0) / total * 100 : 0);
-        } else {
-            sources.forEach(e => obj[e.key] = +r[e.key] || 0);
-        }
-        return obj;
+    
+    const cw = W - margin.left - margin.right;
+    const ch = H - margin.top - margin.bottom;
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const keys = [];
+    document.querySelectorAll('#p3-filter .leg-item.active').forEach(e => {
+        keys.push(e.dataset.val + '_production');
     });
-
-    const stack = d3.stack().keys(sources.map(e => e.key));
-    const series = stack(stackData);
-
-    const xScale = d3.scaleLinear().domain([YEAR_MIN, YEAR_MAX]).range([0, iW]);
-    const yMax = S.countryMode === 'relative' ? 100 : d3.max(series[series.length - 1], d => d[1]);
-    const yScale = d3.scaleLinear().domain([0, yMax || 1]).range([iH, 0]);
-
-    g.append('g').attr('transform', `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(8).tickFormat(d3.format('d')));
-    g.append('g').call(d3.axisLeft(yScale).ticks(5).tickFormat(d => S.countryMode === 'relative' ? d + '%' : d3.format('.2s')(d)));
-
-    const area = d3.area().x(d => xScale(d.data.year)).y0(d => yScale(d[0])).y1(d => yScale(d[1])).curve(d3.curveMonotoneX);
-
-    const tip = document.getElementById('c-area-tooltip');
-    g.selectAll('.area-path').data(series).join('path')
-        .attr('class', 'area-path')
-        .attr('fill', (d, i) => sources[i].color)
-        .attr('d', area);
-
-    g.append('rect').attr('width', iW).attr('height', iH).attr('fill', 'transparent')
-        .on('mousemove', (event) => {
-            const [mx] = d3.pointer(event);
-            const year = Math.round(xScale.invert(mx));
-            const row = stackData.find(d => d.year === year);
-            if (!row) return;
-            const lines = sources.map(e => `
-        <div class="tt-row"><span class="tt-dot" style="background:${e.color}"></span>${e.label}
-        <span class="tt-val">${S.countryMode === 'relative' ? fmt(row[e.key]) + '%' : d3.format('.1f')(row[e.key]) + ' TWh'}</span></div>`).join('');
-            showTip(tip, `<div class="tt-title">${year}</div>${lines}`, event);
-        }).on('mouseleave', () => hideTip(tip));
+    if(!keys.length) return;
+    
+    const x = d3.scaleLinear().domain([YEAR_MIN, YEAR_MAX]).range([0, cw]);
+    g.append('g').attr('transform', `translate(0,${ch})`).call(d3.axisBottom(x).tickFormat(d3.format('d')).ticks(5));
+    
+    const colorMap = { 'coal_production': '#837060', 'oil_production': '#d4721a', 'gas_production': '#e2b840' };
+    
+    if (P_STATE.p3Mode === 'abs') {
+        const maxVal = d3.max(data, d => d3.max(keys, k => +d[k]||0)) || 1;
+        const y = d3.scaleLinear().domain([0, maxVal]).range([ch, 0]).nice();
+        g.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.2s')));
+        
+        keys.forEach(k => {
+            const line = d3.line().defined(d => !isNaN(+d[k])).x(d => x(d.year)).y(d => y(+d[k]));
+            g.append('path').datum(data).attr('fill', 'none').attr('stroke', colorMap[k]).attr('stroke-width', 2).attr('d', line);
+        });
+    } else {
+        // YoY Change %
+        // Need to calculate YoY for total fossil production selected
+        const yoyData = [];
+        for(let i=1; i<data.length; i++) {
+            let prev = d3.sum(keys, k => +data[i-1][k]||0);
+            let curr = d3.sum(keys, k => +data[i][k]||0);
+            let pct = prev > 0 ? ((curr - prev)/prev)*100 : 0;
+            yoyData.push({year: data[i].year, val: pct});
+        }
+        const y = d3.scaleLinear().domain([-20, 20]).range([ch, 0]).clamp(true);
+        g.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(d=>d+'%'));
+        g.append('line').attr('x1', 0).attr('x2', cw).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', '#666');
+        
+        const xb = d3.scaleBand().domain(yoyData.map(d=>d.year)).range([0, cw]).padding(0.2);
+        g.selectAll('rect').data(yoyData).enter().append('rect')
+            .attr('x', d => xb(d.year))
+            .attr('width', xb.bandwidth())
+            .attr('y', d => d.val >= 0 ? y(d.val) : y(0))
+            .attr('height', d => Math.abs(y(d.val) - y(0)))
+            .attr('fill', d => d.val >= 0 ? '#d9ef8b' : '#fc8d59');
+    }
 }
 
-/* ── 15. COMPARISON BAR CHART ────────────────────────────── */
-function renderCompareChart() {
-    const KEY_MAP = {
-        renewable: { field: 'renewables_share_energy', label: 'Renewable %', fmt: v => fmt(v) + '%' },
-        carbon: { field: 'carbon_intensity_elec', label: 'Carbon Intensity g/kWh', fmt: v => fmt(v, 0) },
-        percap: { field: 'energy_per_capita', label: 'Energy per Capita kWh', fmt: v => d3.format(',.0f')(v) },
-    };
-    const { field, label, fmt: fmtFn } = KEY_MAP[S.cmpMetric];
-
-    const allData = DB.countryMeta
-        .map(d => {
-            const row = getCountryRow(d.iso, S.year) || d.latest;
-            return { iso: d.iso, name: d.name, val: row?.[field] };
-        })
-        .filter(d => d.val != null && !isNaN(d.val) && d.val > 0)
-        .sort((a, b) => b.val - a.val)
-        .slice(0, 30);
-
-    const el = document.querySelector('.compare-card');
-    const W = (el?.clientWidth || 800) - 40;
-    const barH = 18, rowH = 22;
-    const H = allData.length * rowH + 50;
-    const m = { top: 20, right: 80, bottom: 20, left: 110 };
-    const iW = W - m.left - m.right;
-
-    const svg = d3.select('#compare-chart').attr('width', W).attr('height', H);
+/* ── PANEL 4: EFFICIENCY ──────────────────────────────────── */
+function renderPanelEcon(iso) {
+    const data = DB.byISO[iso];
+    const {W, H, margin} = getDims('p4-svg');
+    const svg = d3.select('#p4-svg').attr('width', W).attr('height', H);
     svg.selectAll('*').remove();
-    const g = svg.append('g').attr('transform', `translate(${m.left},${m.top})`);
-
-    const xScale = d3.scaleLinear().domain([0, d3.max(allData, d => d.val)]).range([0, iW]);
-    const yScale = d3.scaleBand().domain(allData.map(d => d.iso)).range([0, allData.length * rowH]).padding(0.2);
-
-    g.append('g').call(d3.axisTop(xScale).ticks(5).tickFormat(v => S.cmpMetric === 'percap' ? d3.format('.2s')(v) : v));
-
-    const tip = document.getElementById('cmp-tooltip');
-    const bars = g.selectAll('.bar-g').data(allData).join('g').attr('transform', d => `translate(0,${yScale(d.iso)})`);
-
-    bars.append('rect')
-        .attr('width', d => xScale(d.val))
-        .attr('height', barH)
-        .attr('rx', 3)
-        .attr('fill', d => {
-            if (d.iso === S.mainISO) return '#6c7fff';
-            if (d.iso === S.cmpISO) return '#f9a826';
-            return '#2a3050';
-        })
-        .attr('opacity', d => (d.iso === S.mainISO || d.iso === S.cmpISO) ? 1 : 0.7);
-
-    bars.append('text')
-        .attr('x', -5).attr('y', barH / 2 + 4)
-        .attr('text-anchor', 'end')
-        .attr('fill', d => (d.iso === S.mainISO || d.iso === S.cmpISO) ? '#eef0ff' : '#8b90b8')
-        .attr('font-size', '0.7rem')
-        .text(d => d.name.length > 14 ? d.name.slice(0, 13) + '…' : d.name);
-
-    bars.append('text')
-        .attr('x', d => xScale(d.val) + 5).attr('y', barH / 2 + 4)
-        .attr('fill', '#8b90b8').attr('font-size', '0.7rem')
-        .text(d => fmtFn(d.val));
-
-    bars.on('mousemove', (event, d) => {
-        showTip(tip, `<div class="tt-title">${getFlag(d.iso)} ${d.name}</div>
-      <div class="tt-row">${label}: <span class="tt-val">${fmtFn(d.val)}</span></div>`, event);
-    }).on('mouseleave', () => hideTip(tip));
+    
+    const cw = W - margin.left - margin.right;
+    const ch = H - margin.top - margin.bottom;
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const keys = [];
+    document.querySelectorAll('#p4-filter .leg-item.active').forEach(e => {
+        keys.push(e.dataset.val);
+    });
+    if(!keys.length) return;
+    
+    const x = d3.scaleLinear().domain([YEAR_MIN, YEAR_MAX]).range([0, cw]);
+    g.append('g').attr('transform', `translate(0,${ch})`).call(d3.axisBottom(x).tickFormat(d3.format('d')).ticks(5));
+    
+    const colorMap = {
+        'electricity_generation_per_capita': '#38b6d8',
+        'primary_energy_consumption_per_capita': '#fc8d59',
+        'energy_per_gdp': '#d9ef8b'
+    };
+    
+    // Dual y-axis: energy_per_gdp usually kWh/$, others are TWh/person? 
+    // Actually per_capita is kWh. energy_per_gdp is kWh/$.
+    const capKeys = keys.filter(k => k.includes('capita'));
+    const gdpKeys = keys.filter(k => k.includes('gdp'));
+    
+    if (capKeys.length) {
+        const maxVal = d3.max(data, d => d3.max(capKeys, k => +d[k]||0)) || 1;
+        const yL = d3.scaleLinear().domain([0, maxVal]).range([ch, 0]).nice();
+        g.append('g').call(d3.axisLeft(yL).ticks(5).tickFormat(d3.format('.2s')));
+        
+        capKeys.forEach(k => {
+            const line = d3.line().defined(d => !isNaN(+d[k])).x(d => x(d.year)).y(d => yL(+d[k]));
+            g.append('path').datum(data).attr('fill', 'none').attr('stroke', colorMap[k]).attr('stroke-width', 2).attr('d', line);
+        });
+    }
+    
+    if (gdpKeys.length) {
+        const maxVal = d3.max(data, d => d3.max(gdpKeys, k => +d[k]||0)) || 1;
+        const yR = d3.scaleLinear().domain([0, maxVal]).range([ch, 0]).nice();
+        g.append('g').attr('transform', `translate(${cw},0)`).call(d3.axisRight(yR).ticks(5).tickFormat(d3.format('.2s')));
+        
+        gdpKeys.forEach(k => {
+            const line = d3.line().defined(d => !isNaN(+d[k])).x(d => x(d.year)).y(d => yR(+d[k]));
+            g.append('path').datum(data).attr('fill', 'none').attr('stroke', colorMap[k]).attr('stroke-width', 2).attr('stroke-dasharray', '4 2').attr('d', line);
+        });
+    }
 }
 
-/* ── 16. EVENT HANDLERS ──────────────────────────────────── */
-function bindEvents() {
-    // Global year slider — manual drag pauses auto-play
-    $on('year-slider', 'input', () => {
-        if (playTimer) stopPlay(); // pause on manual interaction
-        S.year = +document.getElementById('year-slider').value;
-        updateSliderUI(S.year);
+/* ── PANEL 5: EMISSIONS ───────────────────────────────────── */
+function renderPanelCO2(iso) {
+    const data = DB.byISO[iso];
+    const {W, H, margin} = getDims('p5-svg');
+    const svg = d3.select('#p5-svg').attr('width', W).attr('height', H);
+    svg.selectAll('*').remove();
+    
+    const cw = W - margin.left - margin.right;
+    const ch = H - margin.top - margin.bottom;
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const x = d3.scaleLinear().domain([YEAR_MIN, YEAR_MAX]).range([0, cw]);
+    g.append('g').attr('transform', `translate(0,${ch})`).call(d3.axisBottom(x).tickFormat(d3.format('d')).ticks(5));
+    
+    const maxCO2 = d3.max(data, d => +d.greenhouse_gas_emissions) || 1;
+    const maxInt = d3.max(data, d => +d.carbon_intensity_elec) || 1;
+    
+    const yL = d3.scaleLinear().domain([0, maxCO2]).range([ch, 0]).nice();
+    const yR = d3.scaleLinear().domain([0, maxInt]).range([ch, 0]).nice();
+    
+    g.append('g').call(d3.axisLeft(yL).ticks(5));
+    g.append('g').attr('transform', `translate(${cw},0)`).call(d3.axisRight(yR).ticks(5));
+    
+    const l1 = d3.line().defined(d => !isNaN(+d.greenhouse_gas_emissions)).x(d => x(d.year)).y(d => yL(+d.greenhouse_gas_emissions));
+    g.append('path').datum(data).attr('fill', 'none').attr('stroke', '#fc8d59').attr('stroke-width', 2).attr('d', l1);
+    
+    const l2 = d3.line().defined(d => !isNaN(+d.carbon_intensity_elec)).x(d => x(d.year)).y(d => yR(+d.carbon_intensity_elec));
+    g.append('path').datum(data).attr('fill', 'none').attr('stroke', '#a6d96a').attr('stroke-width', 2).attr('d', l2);
+}
+
+/* ── PANEL 6: NET IMPORTS ─────────────────────────────────── */
+function renderPanelImport(iso) {
+    const data = DB.byISO[iso];
+    const {W, H, margin} = getDims('p6-svg');
+    const svg = d3.select('#p6-svg').attr('width', W).attr('height', H);
+    svg.selectAll('*').remove();
+    
+    const cw = W - margin.left - margin.right;
+    const ch = H - margin.top - margin.bottom;
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const pb = data.filter(d => !isNaN(+d.net_elec_imports));
+    if(!pb.length) return;
+    
+    const maxM = d3.max(pb, d => Math.abs(+d.net_elec_imports)) || 1;
+    
+    const x = d3.scaleBand().domain(pb.map(d=>d.year)).range([0, cw]).padding(0.2);
+    const y = d3.scaleLinear().domain([-maxM, maxM]).range([ch, 0]).nice();
+    
+    g.append('g').attr('transform', `translate(0,${y(0)})`).call(d3.axisBottom(x).tickValues(x.domain().filter(d => d%5===0)));
+    g.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.2s')));
+    
+    g.selectAll('rect').data(pb).enter().append('rect')
+        .attr('x', d => x(d.year))
+        .attr('width', x.bandwidth())
+        .attr('y', d => d.net_elec_imports > 0 ? y(d.net_elec_imports) : y(0))
+        .attr('height', d => Math.abs(y(d.net_elec_imports) - y(0)))
+        .attr('fill', d => d.net_elec_imports > 0 ? '#E6A817' : '#1A6B5C');
+    
+    // line overlay for share
+    const maxR = d3.max(pb, d => Math.abs(+d.net_elec_imports_share_demand)) || 1;
+    const yR = d3.scaleLinear().domain([-100, 100]).range([ch, 0]);
+    g.append('g').attr('transform', `translate(${cw},0)`).call(d3.axisRight(yR).ticks(5).tickFormat(d=>d+'%'));
+    
+    const line = d3.line().defined(d => !isNaN(+d.net_elec_imports_share_demand))
+        .x(d => x(d.year) + x.bandwidth()/2)
+        .y(d => yR(+d.net_elec_imports_share_demand));
+        
+    g.append('path').datum(pb).attr('fill', 'none').attr('stroke', '#fff').attr('stroke-width', 1.5).attr('d', line);
+}
+
+
+/* ── INITIALIZATION ───────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+    loadAll().then(() => {
+        const viewGlobal = document.getElementById('view-global');
+        if(viewGlobal) viewGlobal.classList.remove('hidden');
+
+        // Force browser layout reflow so clientWidth is accurate
+        void document.body.offsetHeight;
+
+        renderMap();
+        renderSunburst();
         updateMapColors();
         renderTopCountries();
+        
+        const loader = document.getElementById('loading-screen');
+        if(loader) loader.classList.add('done');
+
+        // Add responsive resize listener
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                if (!viewGlobal.classList.contains('hidden')) {
+                    renderMap();
+                    renderSunburst();
+                    updateMapColors();
+                } else if (S.mainISO) {
+                    renderPanelMix(S.mainISO);
+                    renderPanelElec(S.mainISO);
+                    renderPanelFossil(S.mainISO);
+                    renderPanelEcon(S.mainISO);
+                    renderPanelCO2(S.mainISO);
+                    renderPanelImport(S.mainISO);
+                }
+            }, 200);
+        });
+    }).catch(err => {
+        console.error("Initialization failed:", err);
     });
 
-    // Play / Pause button
+    const $on = (id, event, handler) => document.getElementById(id)?.addEventListener?.(event, handler);
+    const $$on = (sel, event, handler) => document.querySelectorAll(sel).forEach(el => el.addEventListener(event, handler));
+
     $on('play-btn', 'click', togglePlay);
 
-    // Global area mode toggle
-    $on('global-mode-btns', 'click', e => {
-        const btn = e.target.closest('.tog');
-        if (!btn) return;
-        S.globalMode = btn.dataset.mode;
-        document.querySelectorAll('#global-mode-btns .tog').forEach(b => b.classList.toggle('active', b === btn));
-        renderAreaChart();
-    });
-
-    // Top countries tabs
-    document.querySelectorAll('#card-top .tab').forEach(btn => {
-        btn.addEventListener('click', () => {
-            S.topTab = btn.dataset.tab;
-            document.querySelectorAll('#card-top .tab').forEach(b => b.classList.toggle('active', b === btn));
-            renderTopCountries();
-        });
-    });
-
-    // Back button
     $on('back-btn', 'click', () => {
         document.getElementById('view-country').classList.add('hidden');
         document.getElementById('view-global').classList.remove('hidden');
         S.mainISO = null; S.cmpISO = null;
-        const sel = document.getElementById('compare-select');
-        if (sel) sel.value = '';
     });
 
-    // Country year slider
-    $on('c-year-slider', 'input', () => {
-        const v = document.getElementById('c-year-slider').value;
+    $on('year-slider', 'input', () => {
+        const v = document.getElementById('year-slider').value;
         S.year = +v;
-        const lbl = document.getElementById('c-year-display');
-        if (lbl) lbl.textContent = S.year;
-        if (S.mainISO) renderDonut(S.mainISO, S.year);
-    });
-
-    // Country area mode
-    $on('country-mode-btns', 'click', e => {
-        const btn = e.target.closest('.tog');
-        if (!btn) return;
-        S.countryMode = btn.dataset.mode;
-        document.querySelectorAll('#country-mode-btns .tog').forEach(b => b.classList.toggle('active', b === btn));
-        if (S.mainISO) renderCountryArea(S.mainISO);
-    });
-
-    // Comparison metric tabs
-    $on('.compare-card .tab-row', 'click', e => {
-        const btn = e.target.closest('.tab');
-        if (!btn) return;
-        S.cmpMetric = btn.dataset.cmp;
-        document.querySelectorAll('.compare-card .tab').forEach(b => b.classList.toggle('active', b === btn));
-        renderCompareChart();
-    });
-
-    // Energy source filter pills
-    $on('energy-filter', 'click', e => {
-        const btn = e.target.closest('.src-pill');
-        if (!btn) return;
-        S.energySource = btn.dataset.source;
-        // Update active pill styles (inline color per source)
-        document.querySelectorAll('.src-pill').forEach(b => {
-            const active = b === btn;
-            const c = FILTER_SOURCES[b.dataset.source].color;
-            b.classList.toggle('active', active);
-            b.style.borderColor = active ? c : '';
-            b.style.color = active ? c : '';
-            b.style.background = active ? `${c}22` : '';
-        });
-        updateMapColors();
-    });
-
-    // Metric filter (% energy / % electricity / per capita)
-    $on('metric-filter', 'click', e => {
-        const btn = e.target.closest('.metric-btn');
-        if (!btn) return;
-        S.energyMetric = btn.dataset.metric;
-        document.querySelectorAll('.metric-btn').forEach(b => b.classList.toggle('active', b === btn));
-        updateMapColors();
-    });
-
-    // Compare country select
-    $on('compare-select', 'change', e => {
-        S.cmpISO = e.target.value || null;
-        const clr = document.getElementById('cmp-clear');
-        if (clr) clr.classList.toggle('hidden', !S.cmpISO);
-        if (S.mainISO) { renderKPIs(S.mainISO); renderRenewGrowth(S.mainISO); renderCompareChart(); }
-    });
-
-    $on('cmp-clear', 'click', () => {
-        S.cmpISO = null;
-        const sel = document.getElementById('compare-select');
-        if (sel) sel.value = '';
-        const clr = document.getElementById('cmp-clear');
-        if (clr) clr.classList.add('hidden');
-        if (S.mainISO) { renderKPIs(S.mainISO); renderRenewGrowth(S.mainISO); renderCompareChart(); }
-    });
-}
-
-// Helper at module scope
-function $on(sel, event, handler) {
-    const el = document.getElementById(sel) || document.querySelector(sel);
-    if (el) el.addEventListener(event, handler);
-}
-
-/* ── 17. INIT ─────────────────────────────────────────────── */
-async function init() {
-    try {
-        await loadAll();
-        document.getElementById('loading-screen').classList.add('done');
-        document.getElementById('view-global').classList.remove('hidden');
-
-        renderMap();
-        renderTrendChart();
-        renderTopCountries();
-        renderAreaChart();
-        bindEvents();
-
-        // Sync slider UI to initial year (1990) and auto-start playback
         updateSliderUI(S.year);
-        updateMapTitle();
-        updateLegend();
-        // Set initial active pill color for renewables
-        const initPill = document.querySelector('.src-pill[data-source="renewables"]');
-        if (initPill) {
-            const c = FILTER_SOURCES.renewables.color;
-            initPill.style.borderColor = c;
-            initPill.style.color = c;
-            initPill.style.background = `${c}22`;
-        }
-        startPlay();
+        updateMapColors();
+        renderSunburst();
+        renderTopCountries();
+    });
 
-        // Re-render on resize
-        window.addEventListener('resize', () => {
-            renderMap();
-            renderTrendChart();
-            renderAreaChart();
-            if (S.mainISO) { renderRenewGrowth(S.mainISO); renderCountryArea(S.mainISO); renderCompareChart(); }
-        });
-    } catch (err) {
-        console.error('Init error:', err);
-        document.querySelector('.loader-inner').innerHTML = `
-      <h2 style="color:#ff6060">⚠️ Failed to Load</h2>
-      <p>${err.message}</p>
-      <p style="margin-top:.5rem">Make sure you're running a local HTTP server<br>(VS Code Live Server, or <code>python -m http.server</code>)</p>
-    `;
-    }
-}
+    $on('energy-source-select', 'change', e => {
+        S.energySource = e.target.value;
+        updateMapColors();
+        renderSunburst();
+    });
 
-init();
+    $$on('.metric-btn', 'click', e => {
+        document.querySelectorAll('.metric-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        S.energyMetric = e.target.dataset.metric;
+        updateMapColors();
+        renderSunburst();
+    });
+});

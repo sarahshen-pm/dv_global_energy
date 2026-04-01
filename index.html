@@ -34,91 +34,95 @@
     <div id="view-global" class="view hidden">
 
         <nav class="topnav">
-            <div class="nav-brand">
+            <div class="nav-brand" style="margin-right: auto;">
                 <span class="brand-icon">⚡</span>
                 <span class="brand-name">Global Energy Dashboard</span>
                 <span class="brand-tag">SD6105</span>
             </div>
-            <div class="nav-center">
-                <span class="metric-pill" id="nav-metric-pill">🌱 Renewables — % Energy</span>
+
+            <div class="nav-center" style="display: flex; gap: 1rem; align-items: center; margin-right: 1.5rem;">
+                <div class="filter-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span class="filter-lbl" style="margin: 0;">Energy Type</span>
+                    <select id="energy-source-select" class="metric-btn"
+                        style="padding: 0.25rem 0.6rem; cursor: pointer; outline: none; background: var(--bg-3); border: 1px solid var(--border-soft); color: var(--text-hi); border-radius: 4px;">
+                        <option value="fossil">🏭 Fossil Fuel</option>
+                        <option value="coal">　⚫ Coal</option>
+                        <option value="gas">　🔥 Natural Gas</option>
+                        <option value="oil">　🛢️ Oil</option>
+                        <option value="renewables" selected>🌱 Renewable</option>
+                        <option value="hydro">　💧 Hydro</option>
+                        <option value="solar">　☀️ Solar</option>
+                        <option value="wind">　💨 Wind</option>
+                        <option value="biofuel">　🌿 Biofuel</option>
+                        <option value="other_renew">　✨ Other Renewable</option>
+                        <option value="nuclear">☢️ Nuclear</option>
+                    </select>
+                </div>
+
+                <div class="filter-sep" style="height: 20px; margin: 0;"></div>
+
+                <div class="metric-pills" id="metric-filter" style="display: flex; gap: 0.28rem;">
+                    <button class="metric-btn" data-metric="consumption">Consumption</button>
+                    <button class="metric-btn active" data-metric="consumption_share">Consumption %</button>
+                    <button class="metric-btn" data-metric="production">Production</button>
+                    <button class="metric-btn" data-metric="generation">Generation</button>
+                    <button class="metric-btn" data-metric="generation_share">Generation %</button>
+                </div>
             </div>
-            <div class="nav-right">
+
+            <div class="nav-right" style="display: flex; align-items: center; gap: 0.8rem;">
                 <!-- Play / Pause button -->
                 <button id="play-btn" class="play-btn" title="Auto-play years">▶</button>
-                <span class="year-bound">1990</span>
+                <span class="year-bound">1965</span>
                 <div class="slider-wrap">
-                    <input type="range" id="year-slider" min="1990" max="2024" value="1990" step="1">
+                    <input type="range" id="year-slider" min="1965" max="2024" value="1965" step="1">
                     <div class="slider-progress" id="slider-progress"></div>
                 </div>
-                <span class="year-val" id="year-display">1990</span>
+                <span class="year-val" id="year-display">1965</span>
             </div>
         </nav>
-
-        <!-- ── Energy Filter Bar ────────────────────────────── -->
-        <div class="filter-bar" id="filter-bar">
-            <div class="src-pills" id="energy-filter">
-                <span class="filter-lbl">Source</span>
-                <button class="src-pill active" data-source="renewables">🌱 Renewables</button>
-                <button class="src-pill" data-source="fossil">🏭 Fossil</button>
-                <button class="src-pill" data-source="coal">⚫ Coal</button>
-                <button class="src-pill" data-source="oil">🛢 Oil</button>
-                <button class="src-pill" data-source="gas">🔥 Gas</button>
-                <button class="src-pill" data-source="nuclear">☢️ Nuclear</button>
-                <button class="src-pill" data-source="hydro">💧 Hydro</button>
-                <button class="src-pill" data-source="solar">☀️ Solar</button>
-                <button class="src-pill" data-source="wind">💨 Wind</button>
-            </div>
-            <div class="filter-sep"></div>
-            <div class="metric-pills" id="metric-filter">
-                <span class="filter-lbl">Metric</span>
-                <button class="metric-btn active" data-metric="share_energy">% Energy</button>
-                <button class="metric-btn" data-metric="share_elec">⚡ Electricity</button>
-                <button class="metric-btn" data-metric="per_capita">👤 Per Capita</button>
-            </div>
-        </div>
 
         <!-- Map + Side Panel -->
         <div class="global-main">
 
             <!-- Left: World Map -->
             <section class="map-section">
-                <header class="panel-hdr">
-                    <h2 id="map-title">Renewable Energy Share by Country</h2>
-                    <p id="map-subtitle">Click any country to explore its energy profile</p>
+                <header class="panel-hdr" style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h2 id="map-title">Renewable Energy Share by Country</h2>
+                        <p id="map-subtitle">Click any country to explore its energy profile</p>
+                    </div>
+                    <div class="map-legend-row" style="width: 250px; padding-bottom: 0.15rem;">
+                        <span class="leg-label" id="legend-min">0</span>
+                        <div class="leg-gradient" id="leg-gradient"></div>
+                        <span class="leg-label" id="legend-max">100%</span>
+                    </div>
                 </header>
                 <div id="map-container">
                     <svg id="world-map"></svg>
                     <div id="map-tooltip" class="tooltip"></div>
-                </div>
-                <div class="map-legend-row">
-                    <span class="leg-label" id="legend-min">0</span>
-                    <div class="leg-gradient" id="leg-gradient"></div>
-                    <span class="leg-label" id="legend-max">100%</span>
-                    <span class="leg-note" id="legend-note">Renewable share</span>
                 </div>
             </section>
 
             <!-- Right: Charts Panel -->
             <aside class="side-panel">
 
-                <!-- Global Trend Line Chart -->
+                <!-- Zoomable Sunburst -->
                 <div class="chart-card" id="card-trend">
                     <div class="card-hdr">
-                        <span>📈</span><span class="card-title">Global Energy Mix Trend</span>
+                        <span>🌐</span><span class="card-title">Global Energy Mix</span>
+                        <span id="sunburst-year-label" style="margin-left:auto;font-family:var(--font-mono);font-size:0.75rem;color:var(--accent-2)"></span>
                     </div>
-                    <svg id="trend-chart"></svg>
-                    <div id="trend-legend" class="inline-legend"></div>
-                    <div id="trend-tooltip" class="tooltip"></div>
+                    <div id="sunburst-container" style="flex:1;min-height:0;position:relative;">
+                        <svg id="sunburst-svg" style="width:100%;height:100%;"></svg>
+                        <div id="sb-tooltip" class="tooltip"></div>
+                    </div>
                 </div>
 
                 <!-- Top Countries -->
                 <div class="chart-card" id="card-top">
                     <div class="card-hdr">
-                        <span>🏆</span><span class="card-title">Top Countries</span>
-                        <div class="tab-row">
-                            <button class="tab active" id="tab-green" data-tab="green">🌿 Greenest</button>
-                            <button class="tab" id="tab-fossil" data-tab="fossil">🏭 Most Fossil</button>
-                        </div>
+                        <span>🏆</span><span class="card-title">Top 10 by Share</span>
                     </div>
                     <div id="top-list"></div>
                 </div>
@@ -126,22 +130,7 @@
             </aside>
         </div><!-- .global-main -->
 
-        <!-- Bottom: Global Stacked Area -->
-        <section class="area-section">
-            <div class="chart-card full">
-                <div class="card-hdr">
-                    <span>🌊</span>
-                    <span class="card-title">Global Energy Consumption Mix (1990 – 2024)</span>
-                    <div class="toggle-grp" id="global-mode-btns">
-                        <button class="tog active" data-mode="relative">Relative %</button>
-                        <button class="tog" data-mode="absolute">Absolute TWh</button>
-                    </div>
-                </div>
-                <svg id="area-chart"></svg>
-                <div id="area-legend" class="inline-legend"></div>
-                <div id="area-tooltip" class="tooltip"></div>
-            </div>
-        </section>
+
 
     </div><!-- #view-global -->
 
@@ -158,79 +147,128 @@
                 <span id="c-name" class="c-name">Country</span>
                 <span class="brand-tag">Energy Profile</span>
             </div>
-            <div class="compare-ctrl">
-                <span class="cmp-label">Compare with:</span>
-                <select id="compare-select">
-                    <option value="">— None —</option>
-                </select>
-                <button id="cmp-clear" class="btn-xs hidden">✕</button>
-            </div>
         </nav>
 
-        <!-- KPI Strip -->
-        <div id="kpi-strip" class="kpi-strip"></div>
 
-        <!-- 2-col grid: donut + renewable growth -->
-        <div class="country-top-row">
 
-            <!-- Donut chart -->
-            <div class="chart-card donut-card">
+        <div class="country-grid">
+            <!-- P1: Energy Mix -->
+            <div class="chart-card p-mix">
                 <div class="card-hdr">
-                    <span>🍕</span>
-                    <span class="card-title" id="donut-title">Energy Mix</span>
-                    <div class="year-ctrl-inline">
-                        <input type="range" id="c-year-slider" min="1990" max="2024" value="2022" step="1">
-                        <span class="year-val" id="c-year-display">2022</span>
+                    <span>📊</span> <span class="card-title">Panel 1 — Energy Mix (Consumption)</span>
+                </div>
+                <div class="custom-legend" id="p1-filter">
+                    <div class="leg-item active" data-val="coal" style="--c:#837060"><span class="leg-swatch"></span>
+                        Coal</div>
+                    <div class="leg-item active" data-val="oil" style="--c:#d4721a"><span class="leg-swatch"></span> Oil
+                    </div>
+                    <div class="leg-item active" data-val="gas" style="--c:#e2b840"><span class="leg-swatch"></span> Gas
+                    </div>
+                    <div class="leg-item active" data-val="nuclear" style="--c:#7b61ff"><span class="leg-swatch"></span>
+                        Nuclear</div>
+                    <div class="leg-item active" data-val="hydro" style="--c:#38b6d8"><span class="leg-swatch"></span>
+                        Hydro</div>
+                    <div class="leg-item active" data-val="solar" style="--c:#f9a826"><span class="leg-swatch"></span>
+                        Solar</div>
+                    <div class="leg-item active" data-val="wind" style="--c:#56de90"><span class="leg-swatch"></span>
+                        Wind</div>
+                    <div class="leg-item active" data-val="biofuel" style="--c:#8fbe7a"><span class="leg-swatch"></span>
+                        Bio</div>
+                    <div class="leg-item active" data-val="other_renewable" style="--c:#56c490"><span
+                            class="leg-swatch"></span> Other</div>
+                </div>
+                <svg id="p1-svg" class="panel-svg"></svg>
+                <div id="p1-tt" class="tooltip"></div>
+            </div>
+
+            <!-- P2: Electricity Generation -->
+            <div class="chart-card p-elec">
+                <div class="card-hdr">
+                    <span>⚡</span> <span class="card-title">Panel 2 — Electricity Generation</span>
+                    <label class="chx-label"><input type="checkbox" id="p2-share-cb"> Show shares</label>
+                </div>
+                <div class="custom-legend" id="p2-filter">
+                    <div class="leg-item active" data-val="coal" style="--c:#837060"><span class="leg-swatch"></span>
+                        Coal</div>
+                    <div class="leg-item active" data-val="oil" style="--c:#d4721a"><span class="leg-swatch"></span> Oil
+                    </div>
+                    <div class="leg-item active" data-val="gas" style="--c:#e2b840"><span class="leg-swatch"></span> Gas
+                    </div>
+                    <div class="leg-item active" data-val="nuclear" style="--c:#7b61ff"><span class="leg-swatch"></span>
+                        Nuclear</div>
+                    <div class="leg-item active" data-val="hydro" style="--c:#38b6d8"><span class="leg-swatch"></span>
+                        Hydro</div>
+                    <div class="leg-item active" data-val="solar" style="--c:#f9a826"><span class="leg-swatch"></span>
+                        Solar</div>
+                    <div class="leg-item active" data-val="wind" style="--c:#56de90"><span class="leg-swatch"></span>
+                        Wind</div>
+                    <div class="leg-item active" data-val="biofuel" style="--c:#8fbe7a"><span class="leg-swatch"></span>
+                        Bio</div>
+                    <div class="leg-item active" data-val="other_renewable" style="--c:#56c490"><span
+                            class="leg-swatch"></span> Other</div>
+                </div>
+                <svg id="p2-svg" class="panel-svg"></svg>
+                <div id="p2-tt" class="tooltip"></div>
+            </div>
+
+            <!-- P3: Fossil Production -->
+            <div class="chart-card p-fossil">
+                <div class="card-hdr">
+                    <span>🏭</span> <span class="card-title">Panel 3 — Fossil Production</span>
+                    <div class="toggle-grp">
+                        <button class="tog active" id="p3-mode-abs">TWh</button>
+                        <button class="tog" id="p3-mode-yoy">Change %</button>
                     </div>
                 </div>
-                <div class="donut-wrap">
-                    <svg id="donut-chart"></svg>
-                    <div id="donut-center" class="donut-center"></div>
+                <div class="custom-legend" id="p3-filter">
+                    <div class="leg-item active" data-val="coal" style="--c:#837060"><span class="leg-swatch"></span>
+                        Coal</div>
+                    <div class="leg-item active" data-val="oil" style="--c:#d4721a"><span class="leg-swatch"></span> Oil
+                    </div>
+                    <div class="leg-item active" data-val="gas" style="--c:#e2b840"><span class="leg-swatch"></span> Gas
+                    </div>
                 </div>
-                <div id="donut-legend" class="inline-legend wrap"></div>
+                <svg id="p3-svg" class="panel-svg"></svg>
+                <div id="p3-tt" class="tooltip"></div>
             </div>
 
-            <!-- Renewable Growth Line Chart -->
-            <div class="chart-card renew-card">
+            <!-- P4: Per-Capita & Economic Efficiency -->
+            <div class="chart-card p-econ">
                 <div class="card-hdr">
-                    <span>🌱</span>
-                    <span class="card-title">Renewable Energy Growth</span>
+                    <span>📈</span> <span class="card-title">Panel 4 — Efficiency</span>
                 </div>
-                <svg id="renew-chart"></svg>
-                <div id="renew-legend" class="inline-legend"></div>
-                <div id="renew-tooltip" class="tooltip"></div>
+                <div class="custom-legend" id="p4-filter">
+                    <div class="leg-item active" data-val="electricity_generation_per_capita" style="--c:#38b6d8"><span
+                            class="leg-swatch"></span> Cap. Elec</div>
+                    <div class="leg-item active" data-val="primary_energy_consumption_per_capita" style="--c:#fc8d59">
+                        <span class="leg-swatch"></span> Cap. Energy</div>
+                    <div class="leg-item active" data-val="energy_per_gdp" style="--c:#d9ef8b"><span
+                            class="leg-swatch"></span> Energy/GDP</div>
+                </div>
+                <svg id="p4-svg" class="panel-svg"></svg>
+                <div id="p4-tt" class="tooltip"></div>
+                <div id="p4-note" class="panel-note"></div>
             </div>
 
-        </div><!-- .country-top-row -->
-
-        <!-- History Stacked Area -->
-        <div class="chart-card full country-card history-card">
-            <div class="card-hdr">
-                <span>📊</span>
-                <span class="card-title" id="history-title">Energy Mix History</span>
-                <div class="toggle-grp" id="country-mode-btns">
-                    <button class="tog active" data-mode="relative">%</button>
-                    <button class="tog" data-mode="absolute">TWh</button>
+            <!-- P5: Emissions & Carbon Intensity -->
+            <div class="chart-card p-co2">
+                <div class="card-hdr">
+                    <span>☁️</span> <span class="card-title">Panel 5 — Emissions</span>
                 </div>
+                <svg id="p5-svg" class="panel-svg"></svg>
+                <div id="p5-tt" class="tooltip"></div>
             </div>
-            <svg id="country-area-chart"></svg>
-            <div id="c-area-tooltip" class="tooltip"></div>
+
+            <!-- P6: Net Electricity Imports -->
+            <div class="chart-card p-import">
+                <div class="card-hdr">
+                    <span>🔌</span> <span class="card-title">Panel 6 — Net Imports</span>
+                </div>
+                <svg id="p6-svg" class="panel-svg"></svg>
+                <div id="p6-tt" class="tooltip"></div>
+            </div>
         </div>
 
-        <!-- Comparison Bar Chart -->
-        <div class="chart-card full country-card compare-card">
-            <div class="card-hdr">
-                <span>🏅</span>
-                <span class="card-title">Global Comparison</span>
-                <div class="tab-row">
-                    <button class="tab active" data-cmp="renewable">Renewable %</button>
-                    <button class="tab" data-cmp="carbon">Carbon Intensity</button>
-                    <button class="tab" data-cmp="percap">Energy per Capita</button>
-                </div>
-            </div>
-            <svg id="compare-chart"></svg>
-            <div id="cmp-tooltip" class="tooltip"></div>
-        </div>
 
     </div><!-- #view-country -->
 

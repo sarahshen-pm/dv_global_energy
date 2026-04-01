@@ -229,6 +229,7 @@ button {
     white-space: nowrap;
 }
 
+
 .filter-sep {
     width: 1px;
     height: 20px;
@@ -446,37 +447,6 @@ button {
     font-weight: 700;
 }
 
-.compare-ctrl {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.cmp-label {
-    font-size: 0.8rem;
-    color: var(--text-md);
-    white-space: nowrap;
-}
-
-#compare-select {
-    background: var(--bg-3);
-    border: 1px solid var(--border);
-    color: var(--text-hi);
-    padding: 0.28rem 0.6rem;
-    border-radius: var(--radius-sm);
-    font-size: 0.8rem;
-    cursor: pointer;
-    max-width: 180px;
-}
-
-.btn-xs {
-    background: rgba(255, 80, 80, 0.15);
-    border: 1px solid rgba(255, 80, 80, 0.3);
-    color: #ff6060;
-    padding: 0.25rem 0.5rem;
-    border-radius: var(--radius-sm);
-    font-size: 0.75rem;
-}
 
 .hidden {
     display: none !important;
@@ -489,7 +459,7 @@ button {
     gap: 1rem;
     padding: 1rem 1.2rem;
     flex: 1;
-    max-height: calc(100vh - 56px - 280px);
+    height: calc(100vh - 60px);
 }
 
 /* ── 7. MAP ─────────────────────────────────────────────────── */
@@ -578,12 +548,9 @@ button {
     height: 8px;
     border-radius: 4px;
     background: linear-gradient(to right, #d73027, #fee08b, #1a9850);
-}
 
-.leg-note {
-    margin-left: 0.5rem;
-    color: var(--text-lo);
-    font-size: 0.7rem;
+
+
 }
 
 /* ── 8. SIDE PANEL ─────────────────────────────────────────── */
@@ -788,39 +755,6 @@ button {
     text-align: right;
 }
 
-/* ── 15. KPI STRIP ─────────────────────────────────────────── */
-.kpi-strip {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 0.8rem;
-    padding: 0.8rem 1.2rem 0;
-}
-
-.kpi-card {
-    background: var(--bg-card-2);
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius);
-    padding: 0.75rem 1rem;
-}
-
-.kpi-label {
-    font-size: 0.73rem;
-    color: var(--text-md);
-    margin-bottom: 0.3rem;
-}
-
-.kpi-val {
-    font-family: var(--font-mono);
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: var(--text-hi);
-}
-
-.kpi-unit {
-    font-size: 0.7rem;
-    color: var(--text-md);
-    margin-top: 0.1rem;
-}
 
 /* ── 16. COUNTRY LAYOUT ─────────────────────────────────────── */
 .country-top-row {
@@ -953,16 +887,75 @@ button {
     }
 }
 
-@media (max-width: 700px) {
-    .kpi-strip {
-        grid-template-columns: repeat(2, 1fr);
-    }
 
-    .country-top-row {
-        grid-template-columns: 1fr;
-    }
+/* ── 6 NEW PANELS LAYOUT ────────────────────────────────────── */
+.country-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 1.2rem;
+    padding: 0.8rem 1.2rem 1.5rem;
+    height: calc(100vh - 60px);
+}
 
-    .compare-ctrl {
-        display: none;
-    }
+.country-grid .chart-card {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Custom Legend */
+.custom-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    padding: 0 1rem;
+    margin-top: -0.3rem;
+    align-items: center;
+}
+.custom-legend .leg-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    font-size: 0.72rem;
+    color: var(--text-md);
+    transition: all 0.2s;
+    user-select: none;
+}
+.custom-legend .leg-item:hover {
+    color: var(--text-hi);
+}
+.custom-legend .leg-item.active {
+    color: var(--text-hi);
+}
+.custom-legend .leg-item .leg-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--c);
+    opacity: 0.2;
+    transition: opacity 0.2s;
+    flex-shrink: 0;
+}
+.custom-legend .leg-item.active .leg-swatch {
+    opacity: 1;
+}
+
+.panel-svg {
+    flex: 1;
+    width: 100%;
+}
+
+
+.panel-note {
+    font-size: 0.65rem;
+    color: var(--text-md);
+    text-align: center;
+    padding: 0.2rem 0 0.5rem;
+    font-style: italic;
+}
+
+@media (max-width: 1200px) {
+    .country-grid { grid-template-columns: 1fr; }
 }
