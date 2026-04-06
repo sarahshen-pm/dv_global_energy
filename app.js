@@ -309,9 +309,23 @@ const FLAG_OVERRIDE = {
     SAU: '🇸🇦', ZAF: '🇿🇦', MEX: '🇲🇽', IDN: '🇮🇩', TUR: '🇹🇷', IRN: '🇮🇷',
     PAK: '🇵🇰', BGD: '🇧🇩', VNM: '🇻🇳', POL: '🇵🇱', NLD: '🇳🇱', CHE: '🇨🇭',
     SWZ: '🇸🇿', COL: '🇨🇴', ARG: '🇦🇷', PER: '🇵🇪', CHL: '🇨🇱', ETH: '🇪🇹',
-    NGA: '🇳🇬', EGY: '🇪🇬', KEN: '🇰🇪', BRA: '🇧🇷', ARE: '🇦🇪',
+    NGA: '🇳🇬', EGY: '🇪🇬', KEN: '🇰🇪', ARE: '🇦🇪',
 };
-function getFlag(iso) { return FLAG_OVERRIDE[iso] || '🏳️'; }
+
+/**
+ * Flag emojis (regional indicator pairs) are not supported on Windows
+ * at the OS level. Detect Windows and hide flags there.
+ */
+const FLAG_SUPPORTED = !/Windows/i.test(navigator.userAgent);
+
+if (!FLAG_SUPPORTED) {
+    document.documentElement.classList.add('no-flags');
+}
+
+function getFlag(iso) {
+    if (!FLAG_SUPPORTED) return '';
+    return FLAG_OVERRIDE[iso] || '';
+}
 
 /* tooltip helper */
 function showTip(tipEl, html, event) {

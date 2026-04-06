@@ -730,6 +730,12 @@ button {
     font-size: 1.1rem;
 }
 
+/* Hide flag emojis on platforms that don't support them (e.g. Windows) */
+.no-flags .top-flag,
+.no-flags .c-flag {
+    display: none;
+}
+
 .top-name {
     flex: 1;
     font-weight: 500;
